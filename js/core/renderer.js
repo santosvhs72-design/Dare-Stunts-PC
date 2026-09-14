@@ -4,6 +4,7 @@ import { program, Target, screenPass, shadowTarget } from './gl.js';
 import { ATTR, SCENE_VS, SCENE_FS } from './shaders/scene.js';
 import { SHADOW_VS, SHADOW_FS } from './shaders/shadow.js';
 import { SCREEN_VS, PRESENT_FS } from './shaders/present.js';
+import { BRIGHT_FS, BLUR_FS } from './shaders/post.js';
 
 // Default until a track sets its own (see Game.load and the sky presets in
 // world/scenery.js) -- day, the same horizon the sky always used.
@@ -62,6 +63,21 @@ const SHADOW_DEPTH = 260;
 // the sun away entirely made the underside of every viaduct read as a hole.
 const SHADOW_STRENGTH = 0.88;
 
+// Glow.
+//
+// At a quarter of the width and height, which is a sixteenth of the pixels:
+// the whole point of a bloom is that it is blurred, so there is nothing in it
+// that survives being computed small. Anything past the threshold is already
+// brighter than the screen can show and is going to be pulled back towards 1
+// by the rolloff anyway -- the glow is what is left of it.
+const BLOOM_SCALE = 4;
+const BLOOM_THRESHOLD = 0.82;
+const BLOOM_KNEE = 0.45;
+const BLOOM_STRENGTH = 0.55;
+// Where the highlight rolloff starts. Below this the picture is passed through
+// untouched, which is most of it.
+const ROLLOFF_KNEE = 0.78;
+
 export class Renderer {
   constructor(canvas) {
     // No depth and no antialias on the canvas itself: it never receives
@@ -75,6 +91,8 @@ export class Renderer {
 
     this.scene = program(gl, SCENE_VS, SCENE_FS, 'cena');
     this.shadow = program(gl, SHADOW_VS, SHADOW_FS, 'sombras');
+    this.bright = program(gl, SCREEN_VS, BRIGHT_FS, 'realces');
+    this.blur = program(gl, SCREEN_VS, BLUR_FS, 'desfoque');
     this.present = program(gl, SCREEN_VS, PRESENT_FS, 'apresentação');
     this.screen = screenPass(gl);
 
@@ -87,6 +105,12 @@ export class Renderer {
     // averaged down. Sized in resize().
     this.hdr = new Target(gl, { samples: SAMPLES, hdr: true, depth: true });
     this.resolved = new Target(gl, { samples: 0, hdr: true, depth: false });
+    // Two of them, because a separable blur reads one and writes the other,
+    // then reads that one and writes back.
+    this.bloom = [
+      new Target(gl, { samples: 0, hdr: true, depth: false }),
+      new Target(gl, { samples: 0, hdr: true, depth: false }),
+    ];
 
     gl.enable(gl.DEPTH_TEST);
     // Culling stays off: the ribbon is viewed from both sides inside loops.
@@ -101,6 +125,7 @@ export class Renderer {
     this.headPos = new Float32Array(6);
     this.headDir = [0, 0, 1];
     this.shadowStrength = SHADOW_STRENGTH;
+    this.bloomStrength = BLOOM_STRENGTH;
     this.resize();
   }
 
@@ -116,6 +141,9 @@ export class Renderer {
     this.aspect = cw / ch;
     this.hdr.resize(cw, ch);
     this.resolved.resize(cw, ch);
+    const bw = Math.max(1, Math.round(cw / BLOOM_SCALE));
+    const bh = Math.max(1, Math.round(ch / BLOOM_SCALE));
+    for (const b of this.bloom) b.resize(bw, bh);
   }
 
   // Uploads a MeshData into GPU buffers. Returns a chunk usable by a scene.
@@ -185,6 +213,7 @@ export class Renderer {
     this.shadowPass(sc);
     this.scenePass(sc);
     this.hdr.blitTo(this.resolved);
+    this.bloomPass();
     this.presentPass();
   }
 
@@ -386,6 +415,32 @@ export class Renderer {
     gl.disable(gl.BLEND);
   }
 
+  // What is brighter than the screen can show, blurred, kept aside.
+  bloomPass() {
+    const gl = this.gl;
+    const [a, b] = this.bloom;
+    gl.disable(gl.DEPTH_TEST);
+
+    a.bind();
+    gl.useProgram(this.bright.prog);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.resolved.texture);
+    gl.uniform1i(this.bright.u.uScene, 0);
+    gl.uniform1f(this.bright.u.uThreshold, BLOOM_THRESHOLD);
+    gl.uniform1f(this.bright.u.uKnee, BLOOM_KNEE);
+    this.screen.draw();
+
+    gl.useProgram(this.blur.prog);
+    gl.uniform1i(this.blur.u.uSource, 0);
+    for (const [src, dst, dir] of [[a, b, [1 / a.width, 0]], [b, a, [0, 1 / a.height]]]) {
+      dst.bind();
+      gl.bindTexture(gl.TEXTURE_2D, src.texture);
+      gl.uniform2f(this.blur.u.uDirection, dir[0], dir[1]);
+      this.screen.draw();
+    }
+    gl.enable(gl.DEPTH_TEST);
+  }
+
   // The finished picture, onto the canvas.
   presentPass() {
     const gl = this.gl;
@@ -396,6 +451,11 @@ export class Renderer {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.resolved.texture);
     gl.uniform1i(this.present.u.uScene, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.bloom[0].texture);
+    gl.uniform1i(this.present.u.uBloom, 1);
+    gl.uniform1f(this.present.u.uBloomStrength, this.bloomStrength);
+    gl.uniform1f(this.present.u.uKnee, ROLLOFF_KNEE);
     this.screen.draw();
     gl.enable(gl.DEPTH_TEST);
   }
