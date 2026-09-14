@@ -25,16 +25,16 @@ export const gripOf = phys => (phys && phys.mu ? phys.mu : 1.45) * 9.81;
 // speed into a corner than the grip strictly allows, letting the understeer
 // wash it off and occasionally brushing a barrier.
 //
-// This one is as fast as this driver goes, and it is not the largest number
-// that could go here -- it is the one past which nothing gets faster.
+// Going faster stops paying at some point, and where that point is depends on
+// the track. Past it, the extra speed carried into the corner is handed
+// straight back to the barrier on the way out -- the Serra Alta is a second
+// *slower* at 2.5 than at 1.7, with the car scraping a wall 13% of the time
+// instead of 4%, and looking like it is being driven badly throughout.
 //
-// Measured on all three tracks: at 1.7 the Serra Alta comes out at 1:37 with
-// the car against a barrier 4% of the time; at 2.5 it comes out at 1:38 with
-// it against a barrier 13% of the time. Everything gained by carrying more
-// speed into the corner is handed straight back to the wall on the way out,
-// and the car looks like it is being driven badly while doing it. There is no
-// setting above this worth having, only one that looks worse.
-export const PACE_FLAT_OUT = 1.7;
+// So flat out is measured rather than declared: these are tried and the best
+// wins. Four runs of the track, which is the price of the one number every
+// difficulty is then expressed against.
+const FLAT_CANDIDATES = [1.0, 1.2, 1.45, 1.7];
 
 // What the controls should be doing this instant.
 //
@@ -161,7 +161,7 @@ export function testDrive(track, { aggression = 1, maxSeconds = 240, phys = null
 // means going too fast; here the first thing to try is faster.
 export function safePace(track, phys, wanted) {
   if (testDrive(track, { aggression: wanted, phys }).ok) return wanted;
-  for (let p = wanted + 0.15; p <= PACE_FLAT_OUT; p += 0.15) {
+  for (let p = wanted + 0.15; p <= 1.7; p += 0.15) {
     if (testDrive(track, { aggression: p, phys }).ok) return p;
   }
   // Nothing gets round this. The editor does not let such a track be saved, so
@@ -170,10 +170,17 @@ export function safePace(track, phys, wanted) {
   return wanted;
 }
 
-// The fastest this driver gets round this track at all, in seconds.
-export function flatOutTime(track, phys) {
-  const r = testDrive(track, { aggression: PACE_FLAT_OUT, phys });
-  return r.ok ? r.seconds : null;
+// The fastest this driver gets round this track at all: the pace that does it
+// and the time it takes. Null if nothing gets round at all.
+export function flatOut(track, phys) {
+  let best = null;
+  for (const pace of FLAT_CANDIDATES) {
+    const r = testDrive(track, { aggression: pace, phys });
+    if (r.ok && (!best || r.seconds < best.seconds)) {
+      best = { pace, seconds: r.seconds, ok: true };
+    }
+  }
+  return best;
 }
 
 // The pace that gets this car round this track in about `seconds`.
@@ -181,16 +188,14 @@ export function flatOutTime(track, phys) {
 // Solved per track, because pace does not mean the same thing on two different
 // tracks. Pace is a fraction of the car's grip, so it only bites where grip is
 // what limits the car: on the Costa Verde, whose corners are wide enough that
-// the car is barely ever grip-limited, going from 1.15 to flat out is worth
-// three seconds; on the Serra Alta it is worth seven and on the Vertigem ten.
-// A difficulty chosen as a bare pace is therefore a different difficulty on
-// every track.
+// the car is barely ever grip-limited, a whole step of pace is worth a couple
+// of seconds; on the Vertigem it is worth ten. A difficulty chosen as a bare
+// pace is therefore a different difficulty on every track.
 //
 // Five runs of the track, about 50 ms each, under the loading screen that is
-// already there. Never returns anything faster than flat out, because there is
-// nothing faster to return.
-export function paceForTime(track, phys, seconds) {
-  let lo = 0.3, hi = PACE_FLAT_OUT, best = null;
+// already there.
+export function paceForTime(track, phys, seconds, maxPace = 1.7) {
+  let lo = 0.3, hi = maxPace, best = null;
   for (let i = 0; i < 5; i++) {
     const mid = (lo + hi) / 2;
     const r = testDrive(track, { aggression: mid, phys, maxSeconds: seconds * 2 + 60 });
@@ -204,5 +209,5 @@ export function paceForTime(track, phys, seconds) {
     }
     if (r.seconds > seconds) lo = mid; else hi = mid;
   }
-  return best || { pace: PACE_FLAT_OUT, seconds: null, ok: false };
+  return best || { pace: maxPace, seconds: null, ok: false };
 }

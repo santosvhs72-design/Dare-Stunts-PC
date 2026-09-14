@@ -81,7 +81,7 @@ Enquanto não houver recorde teu na pista, com o carro do meio:
 |---|---|---|---|
 | ameno | 1:34 | 1:56 | 1:49 |
 | rápido *(por omissão)* | 1:23 | 1:43 | 1:36 |
-| impiedoso | 1:18 | 1:34 | 1:28 |
+| impiedoso | 1:16 | 1:34 | 1:27 |
 
 **A partir do momento em que tens um recorde na pista com esse carro, é esse o
 alvo do adversário**, com uma folga por nível: 1%, 5% ou 12% acima do teu

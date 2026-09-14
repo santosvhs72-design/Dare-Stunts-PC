@@ -74,6 +74,7 @@ export const levelById = id =>
 // Never faster than flat out, because there is nothing faster to ask for, and
 // never slower than the level's own share of flat out.
 export function rivalTime(level, flatOut, recordMs) {
+  if (!flatOut) return null;
   const byShare = flatOut / level.share;
   if (!recordMs) return byShare;
   const byRecord = (recordMs / 1000) * level.margin;

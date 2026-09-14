@@ -10,7 +10,7 @@ import { GhostRecorder, GhostPlayer, buildGhostMesh, ghostModelMatrix,
          loadGhost, saveGhost, clearGhost, lapSlice,
          GHOST_ALPHA, GHOST_AMBIENT } from './ghost.js';
 import { Rival, buildRivalMesh, RIVAL_LEVELS, DEFAULT_LEVEL, levelById, rivalTime } from './rival.js';
-import { safePace, paceForTime, flatOutTime } from './driver.js';
+import { safePace, paceForTime, flatOut } from './driver.js';
 import { profileKey } from '../ui/profiles.js';
 
 const bestKey = id => profileKey(`best.${id}`);
@@ -215,9 +215,13 @@ export class Game {
     // a good lap on this track", so it is used the moment there is one -- see
     // rivalTime. Until then, a share of what the reference driver can do.
     const mine = getCarBest(def.id, this.car0.id);
-    const flatOut = flatOutTime(this.track, this.car0.phys);
-    const seconds = rivalTime(level, flatOut, mine && mine.ms);
-    const solved = paceForTime(this.track, this.car0.phys, seconds);
+    const flat = flatOut(this.track, this.car0.phys);
+    const seconds = rivalTime(level, flat && flat.seconds, mine && mine.ms);
+    // Asking for flat out is answered by the run that just measured it; every
+    // other time has to be searched for.
+    const solved = !flat ? { pace: 1, ok: false }
+      : Math.abs(seconds - flat.seconds) < 0.5 ? flat
+      : paceForTime(this.track, this.car0.phys, seconds, flat.pace);
     // Only worth checking when the search never managed a clean run of the
     // track -- otherwise the pace it came back with has already driven one. On
     // a track with a loop there is a pace below which no car gets round at
