@@ -41,6 +41,26 @@ export class MeshData {
     this.quad([x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [x0, y0, z1], dark, [-1, 0, 0]);
   }
 
+  // Box turned about the vertical axis. Everything in this world that grows
+  // out of the ground -- a tree, a pillar -- looks the same from every side,
+  // so an axis-aligned box was always enough. A cow does not and a house does
+  // not: a field of cattle all facing north reads as scenery, and a village of
+  // houses all square to the same grid reads as a car park.
+  boxY(cx, cy, cz, sx, sy, sz, yaw, col) {
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    // Corner of the footprint, turned. The vertical axis is untouched.
+    const p = (dx, dz, y) => [cx + dx * c + dz * s, y, cz - dx * s + dz * c];
+    const y0 = cy - sy, y1 = cy + sy;
+    const top = shade(col, 1.12), side = shade(col, 0.78), dark = shade(col, 0.6);
+    // Face normals turn with the box; the top and bottom do not.
+    const n = (dx, dz) => [dx * c + dz * s, 0, -dx * s + dz * c];
+    this.quad(p(-sx, -sz, y1), p(-sx, sz, y1), p(sx, sz, y1), p(sx, -sz, y1), top, [0, 1, 0]);
+    this.quad(p(-sx, sz, y0), p(-sx, sz, y1), p(sx, sz, y1), p(sx, sz, y0), side, n(0, 1));
+    this.quad(p(sx, -sz, y0), p(sx, -sz, y1), p(-sx, -sz, y1), p(-sx, -sz, y0), side, n(0, -1));
+    this.quad(p(sx, sz, y0), p(sx, sz, y1), p(sx, -sz, y1), p(sx, -sz, y0), dark, n(1, 0));
+    this.quad(p(-sx, -sz, y0), p(-sx, -sz, y1), p(-sx, sz, y1), p(-sx, sz, y0), dark, n(-1, 0));
+  }
+
   // Pyramid/cone approximation with `sides` faces; used for trees and hills.
   cone(cx, cy, cz, radius, height, sides, col, twist = 0) {
     const apex = [cx, cy + height, cz];

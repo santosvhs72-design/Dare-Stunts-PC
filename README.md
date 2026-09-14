@@ -75,23 +75,36 @@ Quão duro ele é escolhe-se no mesmo menu, em **Adversário**, e a escolha fica
 com o perfil e não com a pista. Com o carro do meio, nas três pistas de
 fábrica:
 
+Enquanto não houver recorde teu na pista, com o carro do meio:
+
 | | Costa Verde | Serra Alta | Vertigem |
 |---|---|---|---|
-| ameno | 1:38 | 2:01 | 1:55 |
-| rápido *(por omissão)* | 1:26 | 1:47 | 1:41 |
-| impiedoso | 1:18 | 1:37 | 1:32 |
+| ameno | 1:34 | 1:56 | 1:49 |
+| rápido *(por omissão)* | 1:23 | 1:43 | 1:36 |
+| impiedoso | 1:18 | 1:34 | 1:28 |
 
-O **impiedoso** não é um número escolhido: é tudo o que o condutor de
-referência tem nessa pista com esse carro, resolvido antes da partida. Os
-outros dois são uma distância declarada atrás disso. Para o adversário passar
-daqui é preciso ensiná-lo a conduzir melhor, não a arriscar mais — a arriscar
-mais já não rende nada.
+**A partir do momento em que tens um recorde na pista com esse carro, é esse o
+alvo do adversário**, com uma folga por nível: 1%, 5% ou 12% acima do teu
+melhor. É a melhor resposta que existe à pergunta "o que é uma volta boa
+aqui", e faz o adversário subir contigo. Nunca mais devagar do que a tabela
+acima, e nunca mais rápido do que o **impiedoso**, que é tudo o que o condutor
+de referência tem nessa pista com esse carro. Para passar daí é preciso
+ensiná-lo a conduzir melhor, não a arriscar mais — a arriscar mais já não
+rende nada.
 
 ## Comandos
 
 ↑/W acelera, ↓/S trava, ←→/AD viram, Espaço é o travão de mão. Nos menus, as
 setas navegam e Enter escolhe. Um comando de jogo também funciona: RT acelera,
 LT trava, stick esquerdo vira, A é o travão de mão.
+
+## O cenário
+
+Árvores, postes de berma e colinas ao longe vieram da versão para televisão.
+Deste lado juntam-se **vacas** e **casas de campo** — uma vacaria a cada cento
+e tal metros, uma casa ou um celeiro a cada duzentos e muitos, bem afastados
+da estrada e virados para onde lhes apetece. São raras de propósito: uma vaca
+só funciona enquanto se dá por ela.
 
 ## Como está feito
 

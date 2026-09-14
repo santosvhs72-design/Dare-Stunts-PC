@@ -11,6 +11,24 @@ const LEAF = [hex('#37662f'), hex('#2f5c2b'), hex('#3f6f34'), hex('#4a6b2c')];
 const POST = hex('#e6eaef');
 const POST_RED = hex('#c4423b');
 
+// Cattle and farm buildings: the land the road was built through, rather than
+// more of the road. Deliberately pale and muted -- they sit in the middle
+// distance and must never pull the eye off the next corner.
+// Not white. A white cow in full sun lands above the bloom threshold (see
+// BLOOM_THRESHOLD in core/renderer.js) and comes back as a glowing blob with
+// its own shape washed out of it -- which is a fair description of what
+// bloom is for and a terrible description of a cow. This is the off-white a
+// Friesian actually is, and it stays under the line.
+const HIDE = hex('#c8c2b4');
+const HIDE_DARK = hex('#3a3632');
+const HIDE_BROWN = hex('#7a5a3e');
+const WALL_CREAM = hex('#d8cdbb');
+const WALL_STONE = hex('#c3bcb0');
+const ROOF_TILE = hex('#9c5442');
+const ROOF_SLATE = hex('#5d5f63');
+const TIMBER = hex('#6b5344');
+const PANE = hex('#3d4650');
+
 const rng = seed => () => {
   seed |= 0; seed = seed + 0x6D2B79F5 | 0;
   let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
@@ -119,6 +137,94 @@ function footprint(frames, clearance) {
   return blocked;
 }
 
+// A cow, about 2.2 m nose to tail and 1.4 m at the shoulder, which is life
+// size. Built out of seven boxes and worth every one of them: the first
+// version was a body, a head and four legs, and at any distance it read as a
+// crate on stilts. What fixed it was narrowing the body to a cow's actual
+// width, filling the gap between head and shoulders with a neck, and dropping
+// the head below the line of the back -- a grazing animal looks down.
+function cow(md, x, z, yaw, r) {
+  const brown = r() < 0.3;
+  const hide = brown ? HIDE_BROWN : HIDE;
+  const y = GROUND_Y;
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  // Forward and sideways in the animal's own frame, so every part follows the
+  // one turn the whole thing was given.
+  const at = (fwd, side) => [x + side * c + fwd * s, z - side * s + fwd * c];
+  const put = (fwd, side, up, sx, sy, sz, col) => {
+    const [px, pz] = at(fwd, side);
+    md.boxY(px, y + up, pz, sx, sy, sz, yaw, col);
+  };
+
+  put(0, 0, 1.06, 0.29, 0.32, 0.82, hide);          // barrel
+  put(0.92, 0, 1.02, 0.22, 0.24, 0.24, hide);       // neck
+  put(1.24, 0, 0.86, 0.2, 0.2, 0.28, brown ? shade(HIDE_BROWN, 0.75) : HIDE_DARK);
+  put(-0.92, 0, 1.16, 0.05, 0.22, 0.06, HIDE_DARK); // tail
+  for (const fwd of [0.6, -0.6]) {
+    for (const side of [0.22, -0.22]) {
+      put(fwd, side, 0.37, 0.1, 0.37, 0.1, shade(HIDE_DARK, 1.25));
+    }
+  }
+  if (!brown) {
+    // Patches, standing proud of the flank on both sides -- a hair was not
+    // enough. At the distance these are ever seen, the patches are the whole
+    // of what says "cow" rather than "white box", and a patch flush with the
+    // flank is invisible from anywhere but dead abeam.
+    for (let i = 0; i < 2; i++) {
+      put((r() - 0.5) * 0.95, 0, 1.06 + (r() - 0.5) * 0.24,
+          0.34, 0.2 + r() * 0.1, 0.22 + r() * 0.12, HIDE_DARK);
+    }
+  }
+}
+
+// A house: walls, a pitched roof, a door and two windows. Two shapes -- a
+// cottage and a long barn -- because one repeated building is worse than none.
+function house(md, x, z, yaw, r) {
+  const barn = r() < 0.35;
+  const w = barn ? 3.4 : 2.9 + r() * 0.8;        // half-width, across the ridge
+  const d = barn ? 7.5 : 3.6 + r() * 1.2;        // half-depth, along the ridge
+  const h = barn ? 3.0 : 2.7 + r() * 0.6;        // wall height
+  const peak = barn ? 2.0 : 2.4;                 // roof rise above the wall top
+  const wall = barn ? WALL_STONE : WALL_CREAM;
+  const roof = r() < 0.5 ? ROOF_TILE : ROOF_SLATE;
+  const y = GROUND_Y;
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  const at = (dx, dz) => [x + dx * c + dz * s, z - dx * s + dz * c];
+
+  md.boxY(x, y + h / 2, z, w, h / 2, d, yaw, wall);
+
+  // Pitched roof: two slopes meeting at a ridge, and a gable at each end. The
+  // eaves overhang a little, which is most of what stops it reading as a lid.
+  const ov = 0.35;
+  const top = y + h, ridgeY = y + h + peak;
+  const P = (dx, dz, yy) => { const [px, pz] = at(dx, dz); return [px, yy, pz]; };
+  for (const sgn of [-1, 1]) {
+    const eaveA = P(sgn * (w + ov), -(d + ov), top);
+    const eaveB = P(sgn * (w + ov), d + ov, top);
+    const ridgeA = P(0, -(d + ov), ridgeY);
+    const ridgeB = P(0, d + ov, ridgeY);
+    md.quad(eaveA, eaveB, ridgeB, ridgeA, shade(roof, sgn > 0 ? 1 : 0.82));
+  }
+  for (const sgn of [-1, 1]) {
+    md.tri(P(-w, sgn * d, top), P(w, sgn * d, top), P(0, sgn * d, ridgeY),
+           shade(wall, 0.9));
+  }
+
+  // A door and two windows on one long side, so the building has a front.
+  const face = d + 0.02;
+  const [dx0, dz0] = at(0, face);
+  md.boxY(dx0, y + 0.95, dz0, 0.42, 0.95, 0.06, yaw, TIMBER);
+  for (const off of [-w * 0.55, w * 0.55]) {
+    const [wx, wz] = at(off, face);
+    md.boxY(wx, y + h * 0.62, wz, 0.34, 0.34, 0.05, yaw, PANE);
+  }
+  if (!barn) {
+    // A chimney, off to one end of the ridge.
+    const [cx2, cz2] = at(w * 0.45, d * 0.45);
+    md.boxY(cx2, ridgeY + 0.35, cz2, 0.22, 0.85, 0.22, yaw, shade(wall, 0.8));
+  }
+}
+
 function tree(md, x, z, r) {
   const h = 4.5 + r() * 5.5;
   const rad = 1.6 + r() * 1.5;
@@ -166,6 +272,36 @@ export function buildScenery(track) {
         const x = p[0] + (r() - 0.5) * 8, z = p[2] + (r() - 0.5) * 8;
         if (blocked.has(cellKey(x, z))) continue;
         tree(md, x, z, r);
+      }
+
+      // Cattle, in ones and twos, well back from the road. Rare on purpose:
+      // the whole point of a cow is that you notice it, and you stop noticing
+      // the fourth one. Grazing animals cluster, so where there is one there
+      // is usually another a few metres off, facing roughly the same way --
+      // which is what makes a pair read as a herd rather than as two props.
+      if (r() < 0.055) {
+        const sgn = r() < 0.5 ? -1 : 1;
+        const u = sgn * (26 + r() * 40);
+        const p = v3.mad(f.pos, f.right, u);
+        const yaw = r() * Math.PI * 2;
+        const n2 = r() < 0.45 ? 2 : 1;
+        for (let k = 0; k < n2; k++) {
+          const x = p[0] + (r() - 0.5) * 9, z = p[2] + (r() - 0.5) * 9;
+          if (blocked.has(cellKey(x, z))) continue;
+          cow(md, x, z, yaw + (r() - 0.5) * 0.9, r);
+        }
+      }
+
+      // A farmhouse or a barn, rarer still and further out. Kept beyond the
+      // trees so it never blocks the view of the road, and given a facing of
+      // its own rather than the road's -- a house that squares up to the
+      // tarmac looks like it was put there for the race.
+      if (r() < 0.02) {
+        const sgn = r() < 0.5 ? -1 : 1;
+        const u = sgn * (52 + r() * 46);
+        const p = v3.mad(f.pos, f.right, u);
+        const x = p[0] + (r() - 0.5) * 12, z = p[2] + (r() - 0.5) * 12;
+        if (!blocked.has(cellKey(x, z))) house(md, x, z, r() * Math.PI * 2, r);
       }
     }
 
