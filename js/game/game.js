@@ -1,4 +1,5 @@
 import { Renderer } from '../core/renderer.js';
+import { MAT } from '../core/materials.js';
 import { buildTrack } from '../world/track.js';
 import { buildSky, buildGround, buildScenery, skyFogColor, skyAmbient } from '../world/scenery.js';
 import { Car, MODE, gearFor } from './car.js';
@@ -459,29 +460,43 @@ export class Game {
       camPos = v3.mad(v3.mad(p.pos, quat.fwd(p.q), -REPLAY_BACK), quat.up(p.q), REPLAY_UP);
       fov = REPLAY_FOV;
     }
-    r.beginFrame(camQuat, camPos, fov);
-    r.drawSky(this.chunks.sky);
-    // A dusk or twilight preset lowers this a little, never far: the ambient
-    // term is a brightness floor (see the shader in core/renderer.js), and the
-    // road still has to be as easy to read as it is at midday.
-    const amb = this.ambient || 1;
-    r.draw(this.chunks.ground, 0.66 * amb);
-    r.draw(this.chunks.scenery, 0.58 * amb);
-    r.draw(this.chunks.road, 0.72 * amb);
-    r.draw(this.chunks.tunnel, 0.5 * amb);   // darker, so a bore feels enclosed
-    r.draw(this.chunks.gates, 0.66 * amb);
-
-    // Drawn last, over the finished scene, because it is blended.
+    // Blended, and drawn after the world it is seen against.
+    const dynamic = [];
     if (this.state === STATE.REPLAY && this.replayPose && this.replayChunk) {
       // Full ambient and opaque: this is the car, not a hint of one, so it
       // reads nothing like the faint record-holder ghost drawn alongside a
       // race in progress below.
-      r.drawGhost(this.replayChunk, ghostModelMatrix(this.replayPose), 1, 1);
+      dynamic.push({ chunk: this.replayChunk, model: ghostModelMatrix(this.replayPose),
+                     material: { ambient: 1 }, alpha: 1 });
     } else if (this.showGhost && this.ghost && this.ghostChunk
         && this.state !== STATE.COUNTDOWN) {
       const pose = this.ghost.at(this.lapTime());
-      if (pose) r.drawGhost(this.ghostChunk, ghostModelMatrix(pose), GHOST_AMBIENT, GHOST_ALPHA);
+      if (pose) {
+        dynamic.push({ chunk: this.ghostChunk, model: ghostModelMatrix(pose),
+                       material: { ambient: GHOST_AMBIENT }, alpha: GHOST_ALPHA });
+      }
     }
+
+    // The frame is described rather than drawn: what there is and what it is
+    // made of, and the renderer decides in how many passes and in what order
+    // that becomes a picture. It takes more than one pass now, and the first
+    // of them looks at the world from the sun rather than from the car.
+    r.renderFrame({
+      camera: { q: camQuat, pos: camPos, fov },
+      sky: this.chunks.sky,
+      // A dusk or twilight preset lowers this a little, never far: a
+      // material's ambient is a brightness floor, and the road still has to
+      // be as easy to read as it is at midday.
+      ambient: this.ambient || 1,
+      groups: [
+        { chunks: this.chunks.ground, material: MAT.GROUND },
+        { chunks: this.chunks.scenery, material: MAT.SCENERY },
+        { chunks: this.chunks.road, material: MAT.ROAD },
+        { chunks: this.chunks.tunnel, material: MAT.TUNNEL },
+        { chunks: this.chunks.gates, material: MAT.GATES },
+      ],
+      dynamic,
+    });
 
     let message = '', sub = '', color = '#ffb43a';
     if (this.state === STATE.COUNTDOWN) {
