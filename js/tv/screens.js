@@ -58,7 +58,10 @@ export function homeScreen(app) {
     { id: 'sound', label: 'Som', hint: '' },
     { id: 'profile', label: 'Perfil', hint: '' },
     { id: 'pad', label: 'Testar Comando', hint: 'ver o que o jogo recebe' },
-    { id: 'quit', label: 'Sair', hint: 'fechar a aplicação' },
+    // No "Sair". On a television there was an application to close and a
+    // native shell to ask; in a browser tab the person opened themselves,
+    // window.close() is refused, and rightly -- the tab is theirs to close.
+    // A menu entry that does nothing when pressed is worse than no entry.
   ];
   let i = 0;
 
@@ -97,7 +100,6 @@ export function homeScreen(app) {
         else if (id === 'build') app.openEditor(null);
         else if (id === 'profile') app.push(profilesScreen(app));
         else if (id === 'pad') app.push(padScreen(app));
-        else if (id === 'quit') app.exit();
         else { app.sound.setMuted(!app.sound.muted); paint(); }
       }
     },

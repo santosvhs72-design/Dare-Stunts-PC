@@ -82,12 +82,6 @@ const app = {
     app.car = loadCar();
     game.car0 = app.car;
   },
-  // A browser tab a person opened themselves will refuse window.close(), and
-  // that is the right outcome: on a PC the tab is theirs to close. The item
-  // stays because the interface it belongs to came from the television build
-  // whole, and removing one entry from a menu that is going to be rewritten
-  // anyway would only make the two harder to compare.
-  exit() { window.close(); },
   startRace(def) { startRace(def); },
   openEditor(def) { app.push(editorScreen(app, def)); },
   paintPad() {
