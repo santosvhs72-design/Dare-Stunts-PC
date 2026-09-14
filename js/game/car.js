@@ -26,6 +26,11 @@ const BRAKE_DRAG = 3;
 const HANDBRAKE_HOLD = 0.5; // fraction of cornering grip left when it is pulled
 const HANDBRAKE_YAW = 1.7;  // rad/s of extra rotation as the rear steps out
 const VU_DECAY = 3.2;       // how fast the tyres scrub a slide off
+// Landing: vertical speed the suspension swallows for nothing, how quickly the
+// rest turns into lost speed, and the most a landing can ever cost.
+const LAND_FREE = 6;
+const LAND_BITE = 50;
+const LAND_MAX = 0.3;
 const SUBSTEP = 1 / 120;
 
 // Per-car handling. Coast braking is weighted toward engine braking rather than
@@ -348,7 +353,22 @@ export class Car {
     this.u = lat;
     this.v = Math.hypot(along, side) * (along < 0 ? -1 : 1);
     this.psi = clamp(Math.atan2(side, Math.abs(along) < 0.01 ? 0.01 : along), -1.1, 1.1);
-    this.v *= 1 - clamp(impact / 34, 0, 0.42);
+    // What a landing costs in speed.
+    //
+    // The vertical part of the velocity is already gone by this point -- `v`
+    // is built from the tangential part alone, which is what a car that lands
+    // squarely actually keeps. This is the extra, for the tyres scrabbling and
+    // the suspension packing down, and it used to be charged from the first
+    // millimetre of drop: the Costa Verde's jump is entered at 178 km/h and
+    // was rejoined at 126, a third of the speed gone with nothing the driver
+    // could have done differently.
+    //
+    // A landing under LAND_FREE is absorbed by the suspension and costs
+    // nothing, which is what a suspension is for. Past that it bites, and a
+    // genuinely violent arrival still hurts -- the same jump now rejoins at
+    // 164, and dropping off the top of a loop still does what it always did.
+    const harsh = Math.max(0, impact - LAND_FREE);
+    this.v *= 1 - clamp(harsh / LAND_BITE, 0, LAND_MAX);
     this.vu = 0;
     this.landings++;
     this.landForce = impact;
