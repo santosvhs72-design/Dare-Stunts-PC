@@ -1,7 +1,8 @@
 import { mat4, v3, quat, frustumPlanes, sphereVisible } from './math.js';
 import { hex } from './mesh.js';
-import { program, Target, screenPass } from './gl.js';
+import { program, Target, screenPass, shadowTarget } from './gl.js';
 import { ATTR, SCENE_VS, SCENE_FS } from './shaders/scene.js';
+import { SHADOW_VS, SHADOW_FS } from './shaders/shadow.js';
 import { SCREEN_VS, PRESENT_FS } from './shaders/present.js';
 
 // Default until a track sets its own (see Game.load and the sky presets in
@@ -35,6 +36,32 @@ const HEAD_DIP = 0.05;      // rad, aimed down: dipped beams, not full
 // that until there is a tone map to bring it back down.
 const HEAD_STRENGTH = 1.5;
 
+// Shadows.
+//
+// A track is up to 3.3 km across. One shadow map over the whole of it, even at
+// 2048 texels a side, gives a texel a metre and a half wide -- which is not a
+// shadow, it is a rumour of one. So there are two, both centred on the car and
+// redrawn every frame: a small one that carries the shadows you are driving
+// through, and a big one for everything from there to the fog.
+//
+// The radii are chosen against what the game actually shows. The near one has
+// to comfortably cover a loop (about 40 m tall) and the trees beside the road;
+// the far one has to reach the fog, which starts closing at 150 m and is total
+// by 460. Nothing past that is ever seen.
+const SHADOW_SIZE = 2048;
+const SHADOW_RADIUS = [80, 300];      // m, half-width of each slab
+// Pushed forward along the view, because the half of a circle behind the car
+// is the half nobody is looking at.
+const SHADOW_AHEAD = [0.45, 0.55];
+// How far above and below the slab the sun still looks for casters: a viaduct
+// 40 m up has to be found from underneath it, and a hill 120 m away has to be
+// found at all.
+const SHADOW_DEPTH = 260;
+// How dark a full shadow gets. Not 1: a real shadow outdoors is lit by the
+// whole sky, and the ambient term here is a crude stand-in for that -- taking
+// the sun away entirely made the underside of every viaduct read as a hole.
+const SHADOW_STRENGTH = 0.88;
+
 export class Renderer {
   constructor(canvas) {
     // No depth and no antialias on the canvas itself: it never receives
@@ -47,8 +74,14 @@ export class Renderer {
     this.canvas = canvas;
 
     this.scene = program(gl, SCENE_VS, SCENE_FS, 'cena');
+    this.shadow = program(gl, SHADOW_VS, SHADOW_FS, 'sombras');
     this.present = program(gl, SCREEN_VS, PRESENT_FS, 'apresentação');
     this.screen = screenPass(gl);
+
+    this.shadowMaps = SHADOW_RADIUS.map(() => shadowTarget(gl, SHADOW_SIZE));
+    this.lightVP = SHADOW_RADIUS.map(() => mat4.identity());
+    this.shadowWorldTexel = new Float32Array(
+      SHADOW_RADIUS.map(r => 2 * r / SHADOW_SIZE));
 
     // Where the world is drawn, and where it lands once the samples are
     // averaged down. Sized in resize().
@@ -67,6 +100,7 @@ export class Renderer {
     this.headStrength = HEAD_STRENGTH;
     this.headPos = new Float32Array(6);
     this.headDir = [0, 0, 1];
+    this.shadowStrength = SHADOW_STRENGTH;
     this.resize();
   }
 
@@ -143,10 +177,12 @@ export class Renderer {
     this.viewMat = mat4.view(cam.q, cam.pos);
     this.skyView = mat4.view(cam.q, cam.pos, true);
     this.camPos = cam.pos;
+    this.camFwd = quat.fwd(cam.q);
     this.planes = frustumPlanes(mat4.mul(this.proj, this.viewMat));
     this.ambientScale = sc.ambient || 1;
     this.aimHeadlights(sc.headlights);
 
+    this.shadowPass(sc);
     this.scenePass(sc);
     this.hdr.blitTo(this.resolved);
     this.presentPass();
@@ -170,6 +206,86 @@ export class Renderer {
     this.headDir = v3.norm(v3.mad(fwd, up, -HEAD_DIP));
   }
 
+  // The world as the sun sees it, into each shadow map in turn.
+  //
+  // Same geometry, same vertex arrays, a different point of view and depth
+  // only. Everything that can cast is drawn -- the ground is the one thing
+  // that cannot, being a flat plane with nothing underneath it, and leaving it
+  // in would only give it the chance to shadow itself.
+  shadowPass(sc) {
+    const gl = this.gl;
+    const u = this.shadow.u;
+    gl.useProgram(this.shadow.prog);
+    gl.uniformMatrix4fv(u.uModel, false, IDENTITY);
+    // Depth is pushed away from the light by a hair, scaled by how steeply the
+    // surface is tilted away from it. The normal offset at lookup time (see
+    // the scene shader) does most of the work; this catches the rest.
+    gl.enable(gl.POLYGON_OFFSET_FILL);
+    gl.polygonOffset(2.2, 4.0);
+
+    for (let i = 0; i < this.shadowMaps.length; i++) {
+      const map = this.shadowMaps[i];
+      const { vp, centre } = this.lightMatrix(SHADOW_RADIUS[i], SHADOW_AHEAD[i]);
+      this.lightVP[i] = vp;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, map.fbo);
+      gl.viewport(0, 0, map.size, map.size);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.uniformMatrix4fv(u.uLightVP, false, vp);
+
+      for (const g of sc.groups || []) {
+        if (g.material.casts === false) continue;
+        for (const c of g.chunks) {
+          if (!c || !c.count) continue;
+          // Culled against the light's slab, not the camera's frustum: what
+          // matters here is whether it can throw a shadow into the picture,
+          // not whether it is in the picture.
+          if (v3.dist(c.center, centre) - c.radius > SHADOW_RADIUS[i] * 1.6) continue;
+          gl.bindVertexArray(c.vao);
+          gl.drawArrays(gl.TRIANGLES, 0, c.count);
+        }
+      }
+      // The ghost and the replay car cast too -- a car with no shadow is the
+      // whole complaint this commit exists to answer, and it is one more draw.
+      for (const d of sc.dynamic || []) {
+        if (!d.chunk || !d.chunk.count) continue;
+        gl.uniformMatrix4fv(u.uModel, false, d.model);
+        gl.bindVertexArray(d.chunk.vao);
+        gl.drawArrays(gl.TRIANGLES, 0, d.chunk.count);
+        gl.uniformMatrix4fv(u.uModel, false, IDENTITY);
+      }
+    }
+
+    gl.disable(gl.POLYGON_OFFSET_FILL);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  // The sun's view of one slab of world: a box `radius` wide, centred a little
+  // ahead of the car, looking along the light.
+  lightMatrix(radius, ahead) {
+    const centre = v3.mad(this.camPos, this.camFwd, radius * ahead);
+
+    // Looking from far enough back that everything tall is still in front.
+    const eye = v3.mad(centre, this.light, SHADOW_DEPTH);
+    const view = mat4.lookAlong(v3.scale(this.light, -1), eye);
+
+    // Snapped to whole texels, in the light's own frame.
+    //
+    // Without this the box slides by a fraction of a texel every frame as the
+    // car moves, every shadow edge is re-rasterised against a slightly
+    // different grid, and the whole world crawls with shimmering edges. It is
+    // the single cheapest thing that separates a shadow map that looks solid
+    // from one that boils.
+    const texel = 2 * radius / SHADOW_SIZE;
+    const cx = view[0] * centre[0] + view[4] * centre[1] + view[8] * centre[2] + view[12];
+    const cy = view[1] * centre[0] + view[5] * centre[1] + view[9] * centre[2] + view[13];
+    const dx = Math.round(cx / texel) * texel - cx;
+    const dy = Math.round(cy / texel) * texel - cy;
+
+    const proj = mat4.ortho(-radius + dx, radius + dx, -radius + dy, radius + dy,
+                            1, SHADOW_DEPTH * 2);
+    return { vp: mat4.mul(proj, view), centre };
+  }
+
   // The world, into the multisampled off-screen buffer.
   scenePass(sc) {
     const gl = this.gl;
@@ -190,6 +306,18 @@ export class Renderer {
     gl.uniform3fv(u.uHeadPos, this.headPos);
     gl.uniform3fv(u.uHeadDir, this.headDir);
     gl.uniform1f(u.uHeadStrength, this.headOn ? this.headStrength : 0);
+
+    gl.uniformMatrix4fv(u.uLightNear, false, this.lightVP[0]);
+    gl.uniformMatrix4fv(u.uLightFar, false, this.lightVP[1]);
+    gl.uniform1f(u.uShadowTexel, 1 / SHADOW_SIZE);
+    gl.uniform2fv(u.uShadowWorldTexel, this.shadowWorldTexel);
+    gl.uniform1f(u.uShadowStrength, this.shadowStrength);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.shadowMaps[0].texture);
+    gl.uniform1i(u.uShadowNear, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.shadowMaps[1].texture);
+    gl.uniform1i(u.uShadowFar, 1);
 
     if (sc.sky) this.drawSky(sc.sky);
     for (const g of sc.groups || []) this.drawGroup(g);

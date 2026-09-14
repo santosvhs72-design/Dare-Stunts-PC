@@ -101,6 +101,34 @@ export const mat4 = {
     ]);
   },
 
+  // A box rather than a pyramid. The sun is far enough away that its rays are
+  // parallel, so what it sees is a slab of world, not a cone of it.
+  ortho(l, r, b, t, n, f) {
+    return new Float32Array([
+      2 / (r - l), 0, 0, 0,
+      0, 2 / (t - b), 0, 0,
+      0, 0, -2 / (f - n), 0,
+      -(r + l) / (r - l), -(t + b) / (t - b), -(f + n) / (f - n), 1,
+    ]);
+  },
+
+  // View matrix for something with no orientation of its own -- the sun, which
+  // has a direction and nothing else. `fwd` is the way it looks; up is picked
+  // arbitrarily, and any choice is as good as another for a light, as long as
+  // it is not parallel to fwd.
+  lookAlong(fwd, pos) {
+    const f = v3.norm(fwd);
+    const up0 = Math.abs(f[1]) > 0.99 ? [0, 0, 1] : [0, 1, 0];
+    const r = v3.norm(v3.cross(up0, f));
+    const u = v3.cross(f, r);
+    return new Float32Array([
+      r[0], u[0], -f[0], 0,
+      r[1], u[1], -f[1], 0,
+      r[2], u[2], -f[2], 0,
+      -v3.dot(r, pos), -v3.dot(u, pos), v3.dot(f, pos), 1,
+    ]);
+  },
+
   identity: () => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
 
   mul(a, b) {

@@ -59,11 +59,68 @@ uniform vec3 uHeadPos[2];
 uniform vec3 uHeadDir;
 uniform float uHeadStrength;
 
+// Two shadow maps, near and far, each holding how close the nearest surface
+// is to the sun in its own slice of the world. See Renderer.shadowPass for
+// why there are two and how big each one's slice is.
+uniform sampler2DShadow uShadowNear, uShadowFar;
+uniform mat4 uLightNear, uLightFar;
+// One texel of a shadow map, as a fraction of it (for filtering) and as a
+// distance in the world (for pushing the lookup off the surface).
+uniform float uShadowTexel;
+uniform vec2 uShadowWorldTexel;
+uniform float uShadowStrength;
+
 in vec3 vAlbedo;
 in vec3 vNormal;
 in vec3 vWorld;
 in float vFog;
 out vec4 oColor;
+
+// Where a point sits in one shadow map, in its own 0..1 box.
+//
+// The lookup is taken from slightly off the surface, along the normal, rather
+// than from the surface itself. A shadow map stores one depth per texel, so a
+// surface at a glancing angle to the sun covers a whole texel's worth of
+// depths with a single number, and comparing itself against that number makes
+// it shadow itself in stripes. Pushing the lookup out by about a texel's
+// width in the world moves it past its own recorded depth. Along the normal
+// rather than along the light, because a surface edge-on to the sun is
+// exactly the case that needs it and exactly the case where a push along the
+// light goes nowhere.
+vec3 shadowCoord(mat4 lightVP, vec3 N, float worldTexel) {
+  vec4 p = lightVP * vec4(vWorld + N * worldTexel * 1.6, 1.0);
+  return p.xyz * 0.5 + 0.5;
+}
+
+// Nine taps in a square. sampler2DShadow compares and filters in hardware, so
+// each of these is already a 2x2 average -- nine of them is a soft edge about
+// five texels wide, which is what keeps a shadow from looking like a stencil.
+float pcf(sampler2DShadow map, vec3 c) {
+  float sum = 0.0;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      sum += texture(map, vec3(c.xy + vec2(x, y) * uShadowTexel, c.z));
+    }
+  }
+  return sum / 9.0;
+}
+
+// 1 in full sun, 0 in full shade.
+float sunlight(vec3 N) {
+  if (uShadowStrength <= 0.0) return 1.0;
+  // The near map first, and the far one only where the near one has run out.
+  // The margin keeps the filter from reaching past the edge of the near map,
+  // where there is nothing recorded and everything would read as lit.
+  vec3 c = shadowCoord(uLightNear, N, uShadowWorldTexel.x);
+  if (all(greaterThan(c.xy, vec2(0.03))) && all(lessThan(c.xy, vec2(0.97))) && c.z < 1.0) {
+    return mix(1.0, pcf(uShadowNear, c), uShadowStrength);
+  }
+  c = shadowCoord(uLightFar, N, uShadowWorldTexel.y);
+  if (any(lessThan(c.xy, vec2(0.0))) || any(greaterThan(c.xy, vec2(1.0))) || c.z > 1.0) {
+    return 1.0;   // beyond both maps: nothing known, so nothing shadowed
+  }
+  return mix(1.0, pcf(uShadowFar, c), uShadowStrength);
+}
 
 // One headlamp: a cone with a soft edge rather than a hard one, so it never
 // paints a visible circle on the road, falling off with distance the way a
@@ -110,12 +167,31 @@ void main(){
   vec3 Nv = dot(N, V) < 0.0 ? -N : N;
 
   float diff = max(dot(N, uLightDir), 0.0);
+  // Whether the sun actually reaches here, or something else got there first.
+  // It multiplies the sun and nothing else: the ambient floor and the
+  // hemispheric term are the sky and the ground bouncing light around, and
+  // those still arrive in shade. A shadow that ate them too would be a black
+  // hole rather than a shadow -- and this is exactly the multiplication that
+  // could not exist while the sun was resolved per vertex and baked into a
+  // single colour.
+  float sun = diff > 0.0 ? diff * sunlight(N) : 0.0;
   // Hemispheric ambient: sky above, ground bounce below. Without it the
   // vertical faces of loops and viaducts read as near-black slabs.
   float hemi = 0.5 + 0.5 * N.y;
-  // uAmbient is a brightness floor, not a mix weight: the inside of a loop
-  // faces away from the sun, and it still has to be readable to drive through.
-  float lit = uAmbient + (1.0 - uAmbient) * (0.45 * hemi + 0.55 * diff);
+
+  // How much light gets here with the sun taken out of the picture: the sky,
+  // and the ground throwing some of it back up. This is what a shadow leaves
+  // behind, and the sun fills in whatever is left over.
+  //
+  // The old arrangement added the sun *into* a floor instead of on top of it,
+  // and the floor was high -- a surface in full sun and the same surface with
+  // the sun completely removed came out 11% apart. That was a reasonable way
+  // to light a world with no shadows in it, where the only job was for
+  // everything to stay readable. It is a terrible way to light one that has
+  // them: there would be nothing for a shadow to do. Same brightness in the
+  // sun as before, to within a few percent, and 35% below it in the shade.
+  float amb = uAmbient * (0.55 + 0.45 * hemi);
+  float lit = amb + (1.0 - amb) * sun;
   vec3 color = mix(vAlbedo, vAlbedo * lit, uLit);
 
   // Everything below is added on top of the light that was always there,
@@ -125,8 +201,10 @@ void main(){
     // Viewpoint-dependent, so it travels across the surface as the camera
     // turns -- which is precisely what shading a flat facet can never do.
     vec3 H = normalize(uLightDir + V);
-    float sun = max(dot(Nv, uLightDir), 0.0);
-    color += vec3(pow(max(dot(Nv, H), 0.0), uShine) * uSpecular * sun);
+    // Shadowed along with the diffuse it belongs to: a glint that survived
+    // into the shade would be the one thing that gave the whole trick away.
+    float glint = max(dot(Nv, uLightDir), 0.0) * sunlight(Nv);
+    color += vec3(pow(max(dot(Nv, H), 0.0), uShine) * uSpecular * glint);
     if (uHeadStrength > 0.0) {
       color += headlamp(uHeadPos[0], Nv, V);
       color += headlamp(uHeadPos[1], Nv, V);
