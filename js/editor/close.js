@@ -188,9 +188,17 @@ function refine(base, u0, d0, d1, R) {
 // Frames are a metre apart, so comparing a long track against a long join pair
 // by pair is millions of tests. They go into a coarse grid first, and only the
 // nine squares around each point of the join are looked at.
-const CLASH_NEAR = 11;       // metres between centrelines that count as on top
+// Measured between centrelines, so it has to be at least as wide as the road
+// actually is: the barriers stand at 6.85 m either side, which is 13.7 m of
+// tarmac from one outside edge to the other. At 11 m two ribbons could pass
+// this test with their barriers overlapping by nearly three metres -- and a
+// barrier across the road is not a near miss, it is a wall.
+const CLASH_NEAR = 15;
 const CLASH_RISE = 4.5;      // metres of height that make it a flyover instead
-const CELL = 12;
+// At least CLASH_NEAR, or the nine squares looked at around each point do not
+// reach as far as the test they are there to serve and near misses slip
+// through the corners of the grid.
+const CELL = 16;
 const KEEP = 26;             // the two ends, where the join is meant to meet
 
 function clashes(frames, from) {
