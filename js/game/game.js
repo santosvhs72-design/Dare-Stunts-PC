@@ -263,7 +263,10 @@ export class Game {
     this.countdown = 3.6;
     this.msg = null;
     this.finalTime = null;
+    // Both accumulate over the run: a record claimed on lap two is still a
+    // record at the finish, whatever lap three turns out to be.
     this.newRecord = false;
+    this.carRecord = false;
     this.lastBeep = null;
     this.ghostRec = new GhostRecorder(this.track);
     this.ghostDelta = null;
@@ -450,19 +453,32 @@ export class Game {
       if (this.lap >= this.laps) this.finish();
       else {
         this.cpIndex = 0;
+        // closeLap may have just taken the record, which swaps the ghost for
+        // the lap that took it -- so the reset below is of the new one.
+        const lapMs = this.closeLap();
+        const tookIt = this.lapTookRecord;
         if (this.ghost) this.ghost.reset();
-        this.setMessage(`VOLTA ${this.lap + 1} / ${this.laps}`,
-          formatTime(this.closeLap()), '#ffb43a', 1.6);
+        this.setMessage(tookIt ? 'RECORDE!' : `VOLTA ${this.lap + 1} / ${this.laps}`,
+          formatTime(lapMs), tookIt ? '#5fd894' : '#ffb43a', 1.6);
         if (this.sound) this.sound.checkpoint();
       }
     }
   }
 
   // The lap just crossed, in its own right rather than as a running total.
+  //
+  // On a circuit the record is claimed here, the moment the line is crossed,
+  // and not at the end of the race. Everything on screen that is about the
+  // best lap -- the figure in the corner, the ghost you are racing, the gap to
+  // it -- is then about the lap you have just driven, for the laps that
+  // follow. Waiting until the finish meant spending two more laps chasing a
+  // time you had already beaten.
   closeLap() {
     const ms = this.timeMs - this.lapStart;
     this.lapTimes.push(ms);
     this.lapStart = this.timeMs;
+    this.lapTookRecord = this.track.closed
+      && this.claimRecord(ms, this.lapTimes.length - 1);
     return ms;
   }
 
@@ -470,14 +486,41 @@ export class Game {
     return this.lapTimes.length ? Math.min(...this.lapTimes) : null;
   }
 
-  // The part of the recording the record is actually about: on a circuit the
-  // best lap alone, rebased to the start of the track; otherwise the whole run.
-  recordRun() {
+  // One lap of the recording, rebased to the start of the track so it plays
+  // back as a lap rather than as the third lap of something. On a sprint there
+  // is only the whole run.
+  lapRun(k) {
     if (!this.track.closed) return this.ghostRec;
-    const k = this.lapTimes.indexOf(this.bestLap());
     let from = 0;
     for (let i = 0; i < k; i++) from += this.lapTimes[i];
     return lapSlice(this.ghostRec, from, from + this.lapTimes[k], k * this.track.length);
+  }
+
+  // A time has just been set. If it beats what was there, everything that
+  // knows about the record changes now: storage, the figure the cockpit shows,
+  // and the ghost -- which becomes this very lap, reloaded so the next lap is
+  // driven against it.
+  //
+  // Returns true if it was an outright record.
+  claimRecord(ms, lapIndex) {
+    const id = this.def.id;
+    const prevCar = getCarBest(id, this.car0.id);
+    if (prevCar == null || ms < prevCar.ms) {
+      saveCarBest(id, this.car0.id, ms);
+      this.carRecord = true;
+    }
+    const prev = getBest(id);
+    if (prev != null && ms >= prev.ms) return false;
+
+    saveBest(id, ms, this.car0.id);
+    this.best = { ms: Math.round(ms), car: this.car0.id };
+    this.newRecord = true;
+    // The lap just driven becomes the ghost to beat. If storage refuses it,
+    // drop any older ghost rather than leave one that no longer matches the
+    // record it claims to be.
+    if (!saveGhost(id, this.lapRun(lapIndex), this.car0.id, ms)) clearGhost(id);
+    this.loadGhostFor(id);
+    return true;
   }
 
   finish() {
@@ -492,31 +535,12 @@ export class Game {
     // lap, not on the total: the total depends on how many laps were chosen,
     // and a best lap does not, so every time on the board stays comparable
     // with every other. A sprint has one lap and the two are the same number.
+    //
+    // On a circuit every lap has already been through claimRecord as it was
+    // crossed, this last one included -- there is nothing left to claim here.
+    // A sprint has no line to cross until now, so this is where it happens.
     const scored = this.track.closed ? this.bestLap() : this.finalTime;
-    const prev = getBest(this.def.id);
-    this.newRecord = prev == null || scored < prev.ms;
-    // Kept apart from the overall record: a lap that beats your own previous
-    // best with this car still means something even when a different car
-    // already holds the track outright, and staying quiet about it would make
-    // trying a car you are not fastest with feel pointless.
-    const prevCar = getCarBest(this.def.id, this.car0.id);
-    const newCarRecord = prevCar == null || scored < prevCar.ms;
-    if (newCarRecord) saveCarBest(this.def.id, this.car0.id, scored);
-    if (this.newRecord) {
-      saveBest(this.def.id, scored, this.car0.id);
-      this.best = { ms: Math.round(scored), car: this.car0.id };
-      // The lap just driven becomes the ghost to beat -- and on a circuit that
-      // is the best lap on its own, not the whole run, or it would be three
-      // times longer than the time it claims to be. If storage refuses it,
-      // drop any older ghost rather than leave one that no longer matches the
-      // record it claims to be.
-      if (saveGhost(this.def.id, this.recordRun(), this.car0.id, scored)) {
-        this.loadGhostFor(this.def.id);
-      } else {
-        clearGhost(this.def.id);
-        this.loadGhostFor(this.def.id);
-      }
-    }
+    if (!this.track.closed) this.claimRecord(scored, 0);
     // A race is won or lost on who got here first, and that is decided the
     // moment you cross: the rival either already has a finish time or it does
     // not, and its own race stops mattering either way.
@@ -530,7 +554,7 @@ export class Game {
       rivalTime: this.rival && this.rival.finishMs,
       // Worth telling apart from the overall record only when it is not also
       // one: "new record" already implies a new personal best with this car.
-      carRecord: newCarRecord && !this.newRecord,
+      carRecord: this.carRecord && !this.newRecord,
       lapTimes: this.lapTimes.slice(),
       circuit: this.track.closed,
       scored,
