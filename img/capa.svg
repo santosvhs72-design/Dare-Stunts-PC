@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540">
+  <title>Dare Stunts TV</title>
+  <clipPath id="c"><rect width="960" height="540" rx="10"/></clipPath>
+
+  <g clip-path="url(#c)">
+    <!-- céu em faixas planas, as cores do céu do jogo -->
+    <rect width="960" height="70" fill="#2b5590"/>
+    <rect y="70" width="960" height="60" fill="#3f6ea8"/>
+    <rect y="130" width="960" height="55" fill="#5a83b8"/>
+    <rect y="185" width="960" height="50" fill="#7c9fcb"/>
+    <rect y="235" width="960" height="40" fill="#9bb8dc"/>
+    <rect y="275" width="960" height="25" fill="#aac6e2"/>
+
+    <!-- sol fatiado -->
+    <circle cx="395" cy="290" r="118" fill="#ffb43a"/>
+    <rect y="196" width="960" height="10" fill="#7c9fcb"/>
+    <rect y="216" width="960" height="8" fill="#7c9fcb"/>
+    <rect y="244" width="960" height="8" fill="#9bb8dc"/>
+    <rect y="262" width="960" height="7" fill="#9bb8dc"/>
+    <rect y="280" width="960" height="6" fill="#aac6e2"/>
+    <rect y="292" width="960" height="5" fill="#aac6e2"/>
+
+    <!-- serra -->
+    <path fill="#93b1cf" d="M0 300 L60 262 104 286 156 238 206 282 250 254 296 284 340 246
+      386 282 432 250 480 284 530 244 580 280 626 256 676 286 724 250 772 282 820 258
+      872 286 920 262 960 300 Z"/>
+    <path fill="#e8eef5" d="M156 238 L170 254 142 254 Z M340 246 L353 261 327 261 Z
+      M530 244 L543 259 517 259 Z M724 250 L736 264 712 264 Z"/>
+    <path fill="#5c7f63" d="M0 298 C110 282 190 300 300 294 C420 288 500 304 610 297
+      C740 289 850 303 960 292 L960 322 L0 322 Z"/>
+
+    <!-- relva -->
+    <rect y="300" width="960" height="240" fill="#4f7d3a"/>
+    <path fill="#487535" d="M0 384 L250 372 430 394 660 374 960 388 960 540 0 540 Z"/>
+
+    <!-- ================================================= o loop, sobre a pista -->
+    <path fill="#5b6270" fill-rule="evenodd"
+          d="M640 96 a80 100 0 1 0 .1 0 Z M640 132 a46 64 0 1 1 -.1 0 Z"/>
+    <ellipse cx="640" cy="196" rx="63" ry="82" fill="none" stroke="#e2e8ef"
+             stroke-width="3" stroke-dasharray="13 17" opacity=".75"/>
+    <path fill="#5b6270" d="M512 306 L620 292 656 300 546 314 Z"/>
+
+    <!-- ================================================================ pista -->
+    <path fill="#5b6270" d="M170 540 Q330 420 500 304 L536 304 Q640 420 700 540 Z"/>
+    <path fill="#c4423b" d="M170 540 Q330 420 500 304 L508 304 Q352 420 196 540 Z"/>
+    <path fill="#c4423b" d="M700 540 Q640 420 536 304 L528 304 Q616 420 672 540 Z"/>
+    <g fill="#eceff2">
+      <path d="M234 492 L258 492 254 474 230 474 Z"/>
+      <path d="M316 433 L336 433 334 420 314 420 Z"/>
+      <path d="M399 374 L414 374 413 365 398 365 Z"/>
+      <path d="M674 492 L648 492 651 474 676 474 Z"/>
+      <path d="M637 433 L615 433 617 420 639 420 Z"/>
+      <path d="M594 374 L578 374 580 365 596 365 Z"/>
+    </g>
+    <g fill="#e2e8ef">
+      <path d="M436 511 L458 511 464 479 446 479 Z"/>
+      <path d="M457 464 L473 464 477 440 463 440 Z"/>
+      <path d="M476 416 L488 416 491 398 480 398 Z"/>
+      <path d="M492 374 L501 374 503 361 494 361 Z"/>
+      <path d="M504 339 L511 339 512 330 505 330 Z"/>
+    </g>
+
+    <!-- a sombra achatada: é o que põe o carro no ar -->
+    <path fill="#3f444d" d="M420 452 L556 436 578 458 448 478 Z"/>
+
+    <!-- ================================================================ carro -->
+    <g transform="translate(456,376) rotate(-18) scale(1.2) translate(-120,-55)">
+      <g fill="#ffd98a">
+        <path opacity=".42" d="M-56 40 L-6 35 L-6 44 L-56 49 Z"/>
+        <path opacity=".32" d="M-44 62 L-4 58 L-4 66 L-44 70 Z"/>
+        <path opacity=".22" d="M-64 82 L-14 77 L-14 84 L-64 89 Z"/>
+      </g>
+      <g stroke="#0b0e13" stroke-width="5" stroke-linejoin="round">
+        <circle cx="56" cy="84" r="24" fill="#1b1f26"/>
+        <circle cx="182" cy="82" r="24" fill="#1b1f26"/>
+        <path fill="#c4823a" d="M2 28 L58 24 L58 37 L2 41 Z"/>
+        <path fill="#96631f" d="M18 37 L27 37 L27 52 L18 52 Z M44 35 L53 35 L53 50 L44 50 Z"/>
+        <path fill="#e8a13c" d="M234 70 L196 54 L164 48 L140 24 L100 22 L70 46 L26 50
+          L14 70 L26 88 L190 88 L234 76 Z"/>
+      </g>
+      <path fill="#ffc861" d="M234 70 L196 54 L164 48 L140 24 L100 22 L70 46 L26 50 L28 59
+        L74 55 L104 30 L136 32 L160 56 L194 63 Z"/>
+      <path fill="#9c6b22" d="M14 70 L26 88 L190 88 L234 76 L234 82 L190 94 L26 94 L9 76 Z"/>
+      <path fill="#2b3038" d="M156 46 L136 28 L104 26 L82 46 Z"/>
+      <path fill="#4d5666" d="M136 28 L104 26 L92 40 L128 37 Z"/>
+      <path fill="#fff3d0" d="M208 59 L226 67 L222 74 L204 66 Z"/>
+      <circle cx="56" cy="84" r="9" fill="#5b636e"/>
+      <circle cx="182" cy="82" r="9" fill="#5b636e"/>
+    </g>
+
+    <!-- ============================================================ pinheiros -->
+    <g fill="#5a4632">
+      <rect x="74" y="452" width="15" height="34"/>
+      <rect x="880" y="430" width="14" height="32"/>
+      <rect x="196" y="318" width="6" height="11"/>
+      <rect x="792" y="320" width="6" height="11"/>
+    </g>
+    <path fill="#2f5c2b" d="M82 330 L126 462 34 462 Z"/>
+    <path fill="#37662f" d="M82 330 L126 462 82 462 Z"/>
+    <path fill="#2f5c2b" d="M887 318 L932 440 842 440 Z"/>
+    <path fill="#37662f" d="M887 318 L932 440 887 440 Z"/>
+    <g fill="#2f5c2b">
+      <path d="M199 274 L215 322 183 322 Z"/>
+      <path d="M238 284 L251 322 225 322 Z"/>
+      <path d="M272 292 L283 322 261 322 Z"/>
+      <path d="M795 276 L811 324 779 324 Z"/>
+      <path d="M760 286 L773 324 747 324 Z"/>
+      <path d="M727 294 L738 324 716 324 Z"/>
+      <path d="M866 288 L879 324 853 324 Z"/>
+    </g>
+  </g>
+
+  <!-- filete discreto, igual ao dos cartões do menu -->
+  <rect x="1" y="1" width="958" height="538" rx="10" fill="none"
+        stroke="#78a0d2" stroke-opacity=".16" stroke-width="2"/>
+</svg>

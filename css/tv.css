@@ -1,0 +1,169 @@
+/* Ten-foot interface: read from a sofa, driven by a D-pad, never a pointer.
+   Type is large, contrast is high, and the focused item is unmistakable --
+   on a TV there is no cursor to tell you where you are. */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#0a0d12;color:#eef3f9;overflow:hidden;
+  font:400 20px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased}
+#stage{position:fixed;inset:0}
+#gl,#hud{position:absolute;inset:0;width:100%;height:100%;display:block}
+#hud{pointer-events:none}
+#ui{position:absolute;inset:0}
+#ui.hidden{display:none}
+
+/* TV makers still crop the edges of the picture. Everything lives inside this
+   margin so nothing important can be cut off. */
+.safe{position:absolute;inset:0;padding:5vh 5vw;display:flex;flex-direction:column}
+
+.screen{position:absolute;inset:0;background:
+  radial-gradient(120% 90% at 50% 0%,#141c28 0%,#0a0d12 62%)}
+
+h1.brand{font-size:4.4vw;font-weight:800;letter-spacing:.02em;line-height:1}
+h1.brand span{color:#ffb43a}
+.sub{color:#8fa2ba;font-size:1.35vw;margin-top:.5vh}
+.title{font-size:2.4vw;font-weight:700;margin-bottom:.4vh}
+.eyebrow{font-size:1.1vw;letter-spacing:.22em;text-transform:uppercase;
+  color:#6f8299;font-weight:700;margin-bottom:1.4vh}
+
+/* --- Home --- */
+.homewrap{display:flex;flex:1;align-items:center;gap:6vw}
+.homeside{flex:1}
+/* A ilustração do ecrã inicial. A largura acompanha o ecrã, mas está limitada
+   também pela altura -- 44vh de altura são 78vh de largura a 16:9 -- porque num
+   ecrã largo e baixo a imagem empurrava-se a si e ao menu para fora da zona
+   segura. O limite vai na largura e não em max-height: com a altura cortada e a
+   largura mantida, a imagem sai esticada. */
+.homeart{display:block;margin-top:3.2vh;width:min(46vw,78vh);height:auto}
+.menu{display:flex;flex-direction:column;gap:1.6vh;min-width:26vw}
+.item{background:rgba(28,38,54,.6);border:2px solid rgba(120,160,210,.14);
+  border-radius:14px;padding:2.2vh 2vw;font-size:1.7vw;font-weight:600;
+  color:#eef3f9;display:flex;justify-content:space-between;align-items:center;gap:1vw;
+  transition:transform .12s,background .12s,border-color .12s}
+.item .hint{font-size:1.1vw;color:#8fa2ba;font-weight:400}
+.item.on{background:rgba(56,80,116,.92);border-color:#ffb43a;transform:translateX(1vw)}
+.item.on .hint{color:#ffd98a}
+
+/* --- Horizontal carousels (car + track pickers) --- */
+.rail{flex:1;display:flex;align-items:center;overflow:hidden}
+.railinner{display:flex;gap:2vw;transition:transform .22s cubic-bezier(.2,.7,.3,1);
+  will-change:transform}
+.card{flex:0 0 auto;width:26vw;background:rgba(22,30,44,.72);
+  border:2px solid rgba(120,160,210,.14);border-radius:18px;padding:1.6vw;
+  transition:transform .18s,border-color .18s,background .18s,opacity .18s;opacity:.5}
+.card.on{border-color:#ffb43a;background:rgba(38,52,74,.95);transform:scale(1.06);opacity:1;
+  box-shadow:0 0 0 6px rgba(255,180,58,.16),0 2vh 4vh rgba(0,0,0,.5)}
+.card img{width:100%;height:auto;display:block;
+  background:radial-gradient(ellipse at 50% 62%,rgba(120,160,210,.12),transparent 68%)}
+.card .cname{font-size:1.9vw;font-weight:700;margin-top:.8vh}
+.card .ctag{font-size:1.15vw;color:#9fb2c8}
+.card .cbest{font-size:1.05vw;color:#6f8299;margin-top:.5vh;min-height:2.6vh}
+
+.bars{margin-top:1vh;display:flex;flex-direction:column;gap:.6vh}
+.bar{display:flex;align-items:center;gap:.8vw;font-size:1vw;color:#8fa2ba}
+.bar span{flex:0 0 6vw}
+.bar i{flex:1;height:.9vh;background:rgba(120,160,210,.16);border-radius:99px;display:block}
+.bar b{display:block;height:100%;border-radius:99px}
+
+.tcard{width:30vw}
+.tcard canvas{width:100%;aspect-ratio:16/9;display:block;border-radius:10px;
+  background:#0b0e14;border:1px solid rgba(120,160,210,.14)}
+.chip{display:inline-block;font-size:.95vw;font-weight:700;padding:.3vh .8vw;
+  border-radius:99px;letter-spacing:.08em;text-transform:uppercase}
+.d1{background:rgba(95,216,148,.16);color:#5fd894}
+.d2{background:rgba(255,180,58,.16);color:#ffb43a}
+.d3{background:rgba(255,110,110,.16);color:#ff8a8a}
+.d4{background:rgba(140,170,255,.16);color:#9fb6ff}
+.meta{display:flex;justify-content:space-between;font-size:1.05vw;color:#8fa2ba;margin-top:.8vh}
+.meta b{color:#eef3f9}
+
+/* --- Button legend: a TV app must say what the buttons do, always --- */
+.legend{display:flex;gap:1.6vw;align-items:center;flex-wrap:wrap;
+  font-size:1.05vw;color:#8fa2ba;padding-top:1.6vh}
+.legend em{font-style:normal;display:inline-flex;align-items:center;justify-content:center;
+  min-width:2.1vw;height:2.1vw;border-radius:99px;font-weight:800;font-size:1vw;
+  margin-right:.5vw;background:rgba(120,160,210,.18);color:#eef3f9}
+.legend .a em{background:#5fd894;color:#06210f}
+.legend .b em{background:#ff8a8a;color:#2a0808}
+.legend .x em{background:#7fb4ff;color:#04162e}
+.legend .y em{background:#ffd15c;color:#2a1c00}
+.legend .pad{margin-left:auto;color:#6f8299}
+.legend .pad.on{color:#5fd894}
+
+/* --- Editor --- */
+.edwrap{flex:1;display:flex;flex-direction:column;gap:1.4vh;min-height:0}
+.edtop{flex:1;display:flex;gap:1.6vw;min-height:0}
+.edmap{flex:1;min-width:0;position:relative}
+.edmap canvas{position:absolute;inset:0;width:100%;height:100%;border-radius:14px;
+  border:1px solid rgba(120,160,210,.16)}
+.edside{flex:0 0 22vw;display:flex;flex-direction:column;gap:1vh;
+  background:rgba(18,25,37,.8);border:1px solid rgba(120,160,210,.14);
+  border-radius:14px;padding:1.4vh 1.2vw;overflow:hidden}
+.edside h4{font-size:1vw;letter-spacing:.18em;text-transform:uppercase;color:#6f8299}
+.edstat{font-size:1.15vw;color:#9fb2ca;line-height:1.7}
+.edstat b{color:#eef3f9}
+
+/* The sequence strip: the track as a row of pieces, walked with left/right. */
+.strip{flex:0 0 auto;display:flex;gap:.6vw;overflow:hidden;padding:1vh 0}
+.stripinner{display:flex;gap:.6vw;transition:transform .2s cubic-bezier(.2,.7,.3,1)}
+.pill{flex:0 0 auto;background:rgba(28,38,54,.75);border:2px solid rgba(120,160,210,.14);
+  border-radius:10px;padding:1vh 1vw;font-size:1.1vw;white-space:nowrap;color:#c8d6e6;
+  transition:transform .14s,border-color .14s,background .14s}
+.pill.on{border-color:#ffb43a;background:rgba(56,80,116,.95);color:#fff;transform:translateY(-.6vh)}
+.pill.cp{color:#ffd98a}
+.pill.end{opacity:.6;font-style:italic}
+
+.msg{font-size:1.15vw;min-height:2.6vh;color:#9fb2ca}
+.msg.good{color:#5fd894}
+.msg.bad{color:#ff8a8a}
+
+/* --- Modal panels (add piece, params, menu, keyboard, pause, result) --- */
+.modal{position:absolute;inset:0;background:rgba(5,8,12,.82);
+  display:flex;align-items:center;justify-content:center;padding:6vh 6vw}
+.panel{background:#121924;border:2px solid rgba(120,160,210,.2);border-radius:18px;
+  padding:3vh 2.6vw;min-width:34vw;max-width:80vw;max-height:88vh;overflow:hidden;
+  box-shadow:0 3vh 8vh rgba(0,0,0,.6)}
+.panel h2{font-size:2.2vw;margin-bottom:1.4vh}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1vh 1vw;margin-top:1vh}
+.gcell{background:rgba(28,38,54,.7);border:2px solid rgba(120,160,210,.14);
+  border-radius:12px;padding:1.6vh 1vw;text-align:center;font-size:1.3vw;font-weight:600;
+  transition:transform .12s,border-color .12s,background .12s}
+.gcell.on{border-color:#ffb43a;background:rgba(56,80,116,.95);transform:scale(1.06)}
+
+.params{display:flex;flex-direction:column;gap:1vh;margin-top:1vh;min-width:30vw}
+.prow{display:flex;align-items:center;gap:1vw;background:rgba(28,38,54,.6);
+  border:2px solid transparent;border-radius:12px;padding:1.2vh 1.2vw;font-size:1.3vw}
+.prow.on{border-color:#ffb43a;background:rgba(56,80,116,.9)}
+.prow .pname{flex:0 0 10vw;color:#c8d6e6}
+.prow .ptrack{flex:1;height:1vh;background:rgba(120,160,210,.18);border-radius:99px;position:relative}
+.prow .pfill{position:absolute;inset:0 auto 0 0;background:#ffb43a;border-radius:99px}
+.prow .pval{flex:0 0 7vw;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.prow .arrows{flex:0 0 auto;color:#6f8299;font-size:1.1vw}
+.prow.on .arrows{color:#ffb43a}
+
+/* --- On-screen keyboard: typing a track name without a keyboard --- */
+.kbval{background:#0b0e14;border:2px solid rgba(120,160,210,.24);border-radius:12px;
+  padding:1.4vh 1.2vw;font-size:1.8vw;font-weight:700;min-height:5vh;margin-bottom:1.4vh;
+  letter-spacing:.02em}
+.kbval .caret{color:#ffb43a;animation:blink 1.1s steps(2,start) infinite}
+@keyframes blink{to{visibility:hidden}}
+.kb{display:flex;flex-direction:column;gap:.7vh}
+.kbrow{display:flex;gap:.7vw}
+.key{flex:1 1 0;background:rgba(28,38,54,.7);border:2px solid rgba(120,160,210,.14);
+  border-radius:10px;padding:1.2vh 0;text-align:center;font-size:1.4vw;font-weight:600;
+  transition:transform .1s,border-color .1s,background .1s}
+.key.on{border-color:#ffb43a;background:rgba(56,80,116,.95);transform:scale(1.08)}
+.key.wide{flex:3 1 0;font-size:1.1vw}
+
+/* Tempos por volta no fim de uma corrida em circuito: uma linha por volta,
+   a melhor realçada, porque num circuito o total diz menos do que ela. */
+.laps{display:flex;flex-direction:column;gap:.4vh;margin:1vh auto 0;
+  max-width:22vw;font-size:1.2vw}
+.lap{display:flex;justify-content:space-between;gap:1.5vw;
+  padding:.5vh 1vw;border-radius:8px;background:rgba(28,38,54,.6);color:#9fb2ca}
+.lap b{color:#eef3f9;font-variant-numeric:tabular-nums}
+.lap.best{background:rgba(79,191,122,.16)}
+.lap.best b{color:#5fd894}
+
+.bigtime{font-size:5vw;font-weight:800;font-variant-numeric:tabular-nums;
+  color:#ffb43a;line-height:1.1;margin:1vh 0}
+.centered{text-align:center}
