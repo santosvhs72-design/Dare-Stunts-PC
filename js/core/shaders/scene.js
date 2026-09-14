@@ -146,7 +146,8 @@ vec3 headlamp(vec3 lampPos, vec3 N, vec3 V) {
   vec3 tint = vec3(1.0, 0.96, 0.86);
   vec3 diffuse = vAlbedo * tint * ndotl * atten;
   vec3 H = normalize(-L + V);
-  vec3 spec = tint * pow(max(dot(N, H), 0.0), uShine) * uSpecular * ndotl * atten;
+  float headroom = 1.0 - 0.6 * max(vAlbedo.r, max(vAlbedo.g, vAlbedo.b));
+  vec3 spec = tint * pow(max(dot(N, H), 0.0), uShine) * uSpecular * ndotl * atten * headroom;
   return (diffuse + spec) * uHeadStrength;
 }
 
@@ -204,7 +205,13 @@ void main(){
     // Shadowed along with the diffuse it belongs to: a glint that survived
     // into the shade would be the one thing that gave the whole trick away.
     float glint = max(dot(Nv, uLightDir), 0.0) * sunlight(Nv);
-    color += vec3(pow(max(dot(Nv, H), 0.0), uShine) * uSpecular * glint);
+    // Weaker on surfaces that are already pale, and that is not a fudge: a
+    // highlight is only visible against what is underneath it, and on white
+    // paint there is nothing for it to be visible against. Tarmac keeps
+    // nearly all of it; the white half of a kerb keeps under half, which is
+    // what stops a kerb in full sun from turning into a wall of light.
+    float headroom = 1.0 - 0.6 * max(vAlbedo.r, max(vAlbedo.g, vAlbedo.b));
+    color += vec3(pow(max(dot(Nv, H), 0.0), uShine) * uSpecular * glint * headroom);
     if (uHeadStrength > 0.0) {
       color += headlamp(uHeadPos[0], Nv, V);
       color += headlamp(uHeadPos[1], Nv, V);

@@ -71,8 +71,15 @@ const SHADOW_STRENGTH = 0.88;
 // brighter than the screen can show and is going to be pulled back towards 1
 // by the rolloff anyway -- the glow is what is left of it.
 const BLOOM_SCALE = 4;
-const BLOOM_THRESHOLD = 0.82;
-const BLOOM_KNEE = 0.45;
+// Above white, not merely bright.
+//
+// At 0.82 this was catching things whose only crime was being pale: the white
+// half of a kerb is 0.93 before a single light touches it, and with the sun's
+// glint on top it went off like a flashbulb -- a wall of white across the
+// road, wide enough to hide the corner behind it. A glow is for what the
+// screen cannot show, and the screen shows white perfectly well.
+const BLOOM_THRESHOLD = 1.0;
+const BLOOM_KNEE = 0.5;
 const BLOOM_STRENGTH = 0.55;
 // Where the highlight rolloff starts. Below this the picture is passed through
 // untouched, which is most of it.
