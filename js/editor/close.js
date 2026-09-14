@@ -180,10 +180,14 @@ function refine(base, u0, d0, d1, R) {
 
 // Where the join would lie on top of road that is already there.
 //
-// Two ribbons of tarmac at the same height in the same place is not a junction,
-// it is a mess: they fight over the same ground and neither reads as a road.
-// Passing over or under is another matter -- the world builds pillars for that
-// already -- so a clash is being close in plan *and* close in height.
+// Crossing is fine, and is no longer anything this has to avoid: two ribbons
+// meeting at an angle are built as a proper junction now, with both roads
+// dropping their barriers and letting each other through (markCrossings, in
+// world/track.js). A figure of eight is a perfectly good circuit.
+//
+// What is still a mess is two ribbons running *along* each other at the same
+// height: they fight over the same ground and neither reads as a road. So a
+// clash is being close in plan, close in height, and pointed the same way.
 //
 // Frames are a metre apart, so comparing a long track against a long join pair
 // by pair is millions of tests. They go into a coarse grid first, and only the
@@ -194,6 +198,10 @@ function refine(base, u0, d0, d1, R) {
 // this test with their barriers overlapping by nearly three metres -- and a
 // barrier across the road is not a near miss, it is a wall.
 const CLASH_NEAR = 15;
+// How far apart two headings have to be before this counts as crossing rather
+// than overlapping. Generous: at 40 degrees two roads still meet in something
+// that reads as a junction, and below that they are starting to merge.
+const CLASH_ANGLE = Math.cos(40 * Math.PI / 180);
 const CLASH_RISE = 4.5;      // metres of height that make it a flyover instead
 // At least CLASH_NEAR, or the nine squares looked at around each point do not
 // reach as far as the test they are there to serve and near misses slip
@@ -222,7 +230,11 @@ function clashes(frames, from) {
       for (let dz = -1; dz <= 1 && !hit; dz++) {
         for (const g of grid.get(key(cx + dx, cz + dz)) || []) {
           if (Math.abs(g.pos[1] - f.pos[1]) > CLASH_RISE) continue;
-          if (Math.hypot(g.pos[0] - f.pos[0], g.pos[2] - f.pos[2]) < CLASH_NEAR) { hit = true; break; }
+          if (Math.hypot(g.pos[0] - f.pos[0], g.pos[2] - f.pos[2]) >= CLASH_NEAR) continue;
+          // Pointed across it rather than along it: a junction, which is fine.
+          const dot = g.fwd[0] * f.fwd[0] + g.fwd[2] * f.fwd[2];
+          if (Math.abs(dot) < CLASH_ANGLE) continue;
+          hit = true; break;
         }
       }
     }

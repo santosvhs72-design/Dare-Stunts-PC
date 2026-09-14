@@ -98,6 +98,20 @@ rende nada.
 setas navegam e Enter escolhe. Um comando de jogo também funciona: RT acelera,
 LT trava, stick esquerdo vira, A é o travão de mão.
 
+## Cruzamentos
+
+Uma pista pode passar por cima de si própria — o mundo põe pilares e faz-se um
+viaduto — e agora também pode **cruzar-se ao nível do chão**. Uma figura de
+oito é o traçado de circuito mais antigo que há, e o construtor fecha
+circuitos por um cruzamento sem hesitar.
+
+O que isso exige é que as duas estradas larguem as bordas onde se encontram:
+cada troço leva berma, barreira e saia dos dois lados, e duas fitas a
+encontrarem-se ao mesmo nível punham quatro paredes atravessadas uma na outra.
+O carro chegava lá a 200 km/h e batia numa barreira no meio da estrada. Onde
+há cruzamento as bordas terminam antes e recomeçam depois, e o alcatrão de uma
+delas cede para as duas não brigarem pelo mesmo chão.
+
 ## O cenário
 
 Árvores, postes de berma e colinas ao longe vieram da versão para televisão.

@@ -106,7 +106,88 @@ function strip(md, a, b, u0, h0, u1, h1, col, flip = false) {
   else md.quad(p0, p1, p2, p3, col);
 }
 
-function buildRoad(frames) {
+// Where the ribbon crosses itself at the same height.
+//
+// A track that comes back through its own path is an ordinary thing to build
+// -- a figure of eight is the oldest circuit shape there is -- and the builder
+// will happily close a circuit through one. What it was not is drivable: every
+// stretch of road carries a kerb, a barrier and a skirt down both sides, so
+// two ribbons meeting at grade put four walls across each other. The car
+// arrives at 200 km/h and hits a barrier standing in the middle of the road.
+//
+// Passing over or under is a different matter and always worked: the world
+// builds pillars for that. So a crossing is being close in plan *and* close in
+// height, and what it needs is for both roads to drop their edges and let each
+// other through.
+const CROSS_NEAR = WALL_OUT * 2;    // barriers touching, 13.7 m between centres
+const CROSS_RISE = 3;               // metres of height that make it a flyover
+const CROSS_SEP = 80;               // frames: nearer than this is the same pass
+const CROSS_OPEN = 7;               // metres of run-in either side of the meeting
+// Two surfaces this close in height are the same piece of ground, and drawing
+// both of them is a z-fight. One gives way; see below for which.
+const CROSS_FLUSH = 0.4;
+const CROSS_PAVE = 7;               // how close the centres must be to give way
+
+function markCrossings(frames, closed) {
+  const n = frames.length;
+  const open = new Uint8Array(n);
+  const hide = new Uint8Array(n);
+  const CELL = 16;
+  const grid = new Map();
+  const key = (a, b) => a + ',' + b;
+  for (let i = 0; i < n; i++) {
+    const f = frames[i];
+    const k = key(Math.floor(f.pos[0] / CELL), Math.floor(f.pos[2] / CELL));
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push(i);
+  }
+  // On a circuit the first and last frames are neighbours, so how far apart two
+  // frames are has to go round as well.
+  const sep = (i, j) => {
+    const d = Math.abs(i - j);
+    return closed ? Math.min(d, n - d) : d;
+  };
+
+  for (let i = 0; i < n; i++) {
+    const f = frames[i];
+    const cx = Math.floor(f.pos[0] / CELL), cz = Math.floor(f.pos[2] / CELL);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        for (const j of grid.get(key(cx + dx, cz + dz)) || []) {
+          if (sep(i, j) < CROSS_SEP) continue;
+          const g = frames[j];
+          const dy = g.pos[1] - f.pos[1];
+          if (Math.abs(dy) > CROSS_RISE) continue;
+          const d = Math.hypot(g.pos[0] - f.pos[0], g.pos[2] - f.pos[2]);
+          if (d > CROSS_NEAR) continue;
+          open[i] = 1;
+          // Whoever is underneath gives up their tarmac, and where the two are
+          // flush it is settled by index so that exactly one of the pair does
+          // -- if both gave way there would be a hole in the road.
+          if (d < CROSS_PAVE
+              && (dy > CROSS_FLUSH || (Math.abs(dy) <= CROSS_FLUSH && j < i))) {
+            hide[i] = 1;
+          }
+        }
+      }
+    }
+  }
+
+  // Open the edges a little before and after, so the barrier ends where the
+  // junction begins rather than in the middle of it.
+  const reach = Math.round(CROSS_OPEN / DS);
+  const wide = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if (!open[i]) continue;
+    for (let k = -reach; k <= reach; k++) {
+      const j = closed ? ((i + k) % n + n) % n : i + k;
+      if (j >= 0 && j < n) wide[j] = 1;
+    }
+  }
+  return { open: wide, hide };
+}
+
+function buildRoad(frames, cross) {
   const chunks = [];
   let md = new MeshData();
   let segInChunk = 0;
@@ -117,32 +198,40 @@ function buildRoad(frames) {
     if (!a.gap) {
       const tone = Math.floor(i / 16) % 2 ? COL.asphaltB : COL.asphaltA;
 
-      strip(md, a, b, -ROAD_HALF, 0, -0.22, 0, tone);
-      strip(md, a, b, 0.22, 0, ROAD_HALF, 0, tone);
-      // Dashed centre line.
-      const dash = Math.floor(i / (MESH_STEP * 4)) % 2 === 0;
-      strip(md, a, b, -0.22, 0, 0.22, 0, dash ? COL.line : tone);
-
-      const curb = curbToggle % 2 ? COL.curbA : COL.curbB;
-      // Alternating shade reads as structural ribs, which is what makes a loop
-      // legible as a concrete tube rather than a flat mass.
-      const rib = shade(COL.apron, curbToggle % 4 < 2 ? 1 : 0.86);
-      const rail = shade(COL.rail, curbToggle % 6 < 3 ? 1 : 0.9);
-      for (const sgn of [-1, 1]) {
-        const inner = sgn * ROAD_HALF, outer = sgn * CURB_OUT, wall = sgn * WALL_OUT;
-        strip(md, a, b, inner, CURB_H, outer, CURB_H, curb, sgn < 0);
-        strip(md, a, b, inner, 0, inner, CURB_H, shade(curb, 0.8), sgn < 0);
-        // Barrier: the car bounces off this instead of leaving the track.
-        strip(md, a, b, outer, CURB_H, outer, WALL_H, rail, sgn < 0);
-        strip(md, a, b, outer, WALL_H, wall, WALL_H, shade(rail, 1.08), sgn < 0);
-        // Striped on the outside too. These two faces are the rims of a loop seen
-        // from head-on, and plain grey made a loop read as an anonymous wall.
-        strip(md, a, b, wall, WALL_H, wall, 0, shade(curb, 0.92), sgn < 0);
-        strip(md, a, b, wall, 0, wall, -APRON, rib, sgn < 0);
+      // Inside a junction the other road is already covering this ground, and
+      // two surfaces at the same height fight over every pixel of it.
+      if (!cross.hide[i]) {
+        strip(md, a, b, -ROAD_HALF, 0, -0.22, 0, tone);
+        strip(md, a, b, 0.22, 0, ROAD_HALF, 0, tone);
+        // Dashed centre line.
+        const dash = Math.floor(i / (MESH_STEP * 4)) % 2 === 0;
+        strip(md, a, b, -0.22, 0, 0.22, 0, dash ? COL.line : tone);
       }
-      // Banded underside: this is the outer skin of a loop, so it needs rhythm.
-      strip(md, a, b, -WALL_OUT, -APRON, WALL_OUT, -APRON,
-            shade(COL.apron, curbToggle % 4 < 2 ? 0.74 : 0.6), true);
+
+      // A kerb, a barrier and a skirt down both sides -- except across a
+      // junction, where they would be four walls in the middle of the road.
+      if (!cross.open[i]) {
+        const curb = curbToggle % 2 ? COL.curbA : COL.curbB;
+        // Alternating shade reads as structural ribs, which is what makes a
+        // loop legible as a concrete tube rather than a flat mass.
+        const rib = shade(COL.apron, curbToggle % 4 < 2 ? 1 : 0.86);
+        const rail = shade(COL.rail, curbToggle % 6 < 3 ? 1 : 0.9);
+        for (const sgn of [-1, 1]) {
+          const inner = sgn * ROAD_HALF, outer = sgn * CURB_OUT, wall = sgn * WALL_OUT;
+          strip(md, a, b, inner, CURB_H, outer, CURB_H, curb, sgn < 0);
+          strip(md, a, b, inner, 0, inner, CURB_H, shade(curb, 0.8), sgn < 0);
+          // Barrier: the car bounces off this instead of leaving the track.
+          strip(md, a, b, outer, CURB_H, outer, WALL_H, rail, sgn < 0);
+          strip(md, a, b, outer, WALL_H, wall, WALL_H, shade(rail, 1.08), sgn < 0);
+          // Striped on the outside too. These two faces are the rims of a loop
+          // seen head-on, and plain grey made a loop an anonymous wall.
+          strip(md, a, b, wall, WALL_H, wall, 0, shade(curb, 0.92), sgn < 0);
+          strip(md, a, b, wall, 0, wall, -APRON, rib, sgn < 0);
+        }
+        // Banded underside: the outer skin of a loop, so it needs rhythm.
+        strip(md, a, b, -WALL_OUT, -APRON, WALL_OUT, -APRON,
+              shade(COL.apron, curbToggle % 4 < 2 ? 0.74 : 0.6), true);
+      }
       curbToggle++;
     }
 
@@ -371,11 +460,12 @@ export function buildTrack(def) {
   const base = walkTrack(def.pieces);
   const { frames, length } = base;
   const tunnels = buildTunnels(frames);
+  const cross = markCrossings(frames, base.closed);
 
   return {
     ...base,
     def,
-    roadMeshes: [...buildRoad(frames), ...buildSupports(frames), ...tunnels.portals],
+    roadMeshes: [...buildRoad(frames, cross), ...buildSupports(frames), ...tunnels.portals],
     tunnelMeshes: tunnels.bore,
     gateMeshes: buildGates(frames, base.rawCheckpoints, length, base.closed),
 
