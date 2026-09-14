@@ -30,12 +30,17 @@ Por ordem do que mais se nota:
 1. ~~**Sombras**~~ — feito: shadow map direccional em dois mapas.
 2. ~~**Iluminação por fragmento**~~ — feito: faróis, brilho de sol na estrada, e
    túneis e interiores de loops verdadeiramente escuros.
-3. **Anti-aliasing e pós-processamento** — o mundo é feito de faces planas e
-   arestas duras, e é onde o serrilhado mais se nota. Falta o tone map, o
-   *bloom* e o FXAA; o multisampling já lá está.
-4. **Céu e neblina melhores** — neblina por distância a sério, gradiente
-   atmosférico.
+3. ~~**Anti-aliasing e pós-processamento**~~ — feito: quatro amostras de
+   multisampling, curva de realces e *bloom*.
+4. **Céu e neblina melhores** — neblina por distância a sério em vez de por
+   profundidade de vista, e a cor da neblina a vir do próprio céu na direcção
+   em que se olha, em vez de ser mantida igual ao horizonte à mão.
 5. **Efeitos** — reflexo de estrada molhada, pó nas bermas, marcas de travagem.
+
+Duas coisas a fazer que não estão nesta lista: as luzes do tecto de um túnel
+deviam ser emissivas e brilhar, e para isso precisam de ser uma malha à parte
+da abóbada onde estão hoje embutidas; e a interface tem de deixar de ser a da
+televisão.
 
 ## Correr
 
