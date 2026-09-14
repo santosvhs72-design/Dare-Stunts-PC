@@ -8,7 +8,8 @@ import { CARS, carById } from '../game/cars.js';
 import { TRACKS } from '../world/tracks.js';
 import { getBest, getCarBests, clearRecord,
          getLaps, setLaps, LAP_CHOICES,
-         getRaceMode, setRaceMode, MODE_RACE, MODE_TIME } from '../game/game.js';
+         getRaceMode, setRaceMode, MODE_RACE, MODE_TIME,
+         getRivalLevel, setRivalLevel, RIVAL_LEVELS, levelById } from '../game/game.js';
 import { formatTime } from '../game/hud.js';
 import { loadCustom, loadShared, deleteCustom, setTrackShared } from '../world/customtracks.js';
 import { walkTrack } from '../world/track.js';
@@ -413,7 +414,8 @@ export function trackScreen(app, { shared = false } = {}) {
         <span>Recorde <b>${formatTime(best && best.ms)}</b>${who}</span></div>
       <div class="meta"><span>Contigo (${esc(app.car.name)}) <b>${formatTime(mine)}</b></span>
         ${isCircuit(t) ? `<span>Circuito <b>${getLaps(t.id)} voltas</b></span>` : ''}</div>
-      <div class="meta"><span>${isRace(t) ? 'Corrida <b>contra um adversário</b>'
+      <div class="meta"><span>${isRace(t)
+        ? `Corrida &middot; adversário <b>${esc(levelById(getRivalLevel()).label)}</b>`
         : 'Contra o <b>relógio</b>'}</span></div>
     </div>`;
   };
@@ -533,10 +535,22 @@ export function trackScreen(app, { shared = false } = {}) {
         } },
       { label: 'Ver recordes', run: () => { app.pop(); app.push(recordsScreen(t)); } },
     ];
+    // Only worth a line when there is a rival to be hard or easy. Unlike
+    // everything else in this menu it is not about this track -- it is kept
+    // with the profile -- but this is where someone who has just been beaten,
+    // or just walked it, is looking.
+    if (isRace(t)) {
+      items.splice(2, 0, { label: () => `Adversário: ${levelById(getRivalLevel()).label}`,
+        run: () => {
+          const k = RIVAL_LEVELS.findIndex(l => l.id === getRivalLevel());
+          setRivalLevel(RIVAL_LEVELS[(k + 1) % RIVAL_LEVELS.length].id);
+          paintM(); refresh();
+        } });
+    }
     // Only a circuit has laps to choose. The record is the best single lap, so
     // changing this never puts times out of reach of each other.
     if (isCircuit(t)) {
-      items.splice(2, 0, { label: () => `Voltas: ${getLaps(t.id)}`, run: () => {
+      items.splice(isRace(t) ? 3 : 2, 0, { label: () => `Voltas: ${getLaps(t.id)}`, run: () => {
         const k = LAP_CHOICES.indexOf(getLaps(t.id));
         setLaps(t.id, LAP_CHOICES[(k + 1) % LAP_CHOICES.length]);
         paintM(); refresh();

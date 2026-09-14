@@ -69,11 +69,15 @@ construíste é possível de todo (`js/game/driver.js`). É um carro a sério, c
 a mesma física que o teu: pode ser travado, encosta-se para o lado quando
 chegas ao lado dele, e se lhe tocares sentem-no os dois.
 
-O ritmo dele não é uma dificuldade escolhida à mão — é **resolvido** antes da
-partida, procurando por bissecção o esforço que o leva a fazer o tempo-alvo da
-pista. Quando já és mais rápido do que esse tempo com esse carro, passa a ser
-o teu melhor com uma folga de 3%. Custa cerca de 350 ms, debaixo do ecrã de
-carregamento que já lá estava.
+Quão duro ele é escolhe-se no mesmo menu, em **Adversário**, e a escolha fica
+com o perfil e não com a pista. Com o carro do meio, nas três pistas de
+fábrica:
+
+| | Costa Verde | Serra Alta | Vertigem |
+|---|---|---|---|
+| ameno | 1:41 | 2:11 | 1:58 |
+| rápido *(por omissão)* | 1:29 | 1:56 | 1:47 |
+| impiedoso | 1:22 | 1:47 | 1:40 |
 
 ## Comandos
 

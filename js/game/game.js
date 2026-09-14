@@ -9,8 +9,8 @@ import { clamp, quat, v3 } from '../core/math.js';
 import { GhostRecorder, GhostPlayer, buildGhostMesh, ghostModelMatrix,
          loadGhost, saveGhost, clearGhost, lapSlice,
          GHOST_ALPHA, GHOST_AMBIENT } from './ghost.js';
-import { Rival, buildRivalMesh, rivalTarget } from './rival.js';
-import { paceFor } from './driver.js';
+import { Rival, buildRivalMesh, RIVAL_LEVELS, DEFAULT_LEVEL, levelById } from './rival.js';
+import { safePace } from './driver.js';
 import { profileKey } from '../ui/profiles.js';
 
 const bestKey = id => profileKey(`best.${id}`);
@@ -110,6 +110,22 @@ export function setRaceMode(id, mode) {
   try { localStorage.setItem(modeKey(id), mode); } catch { /* private mode */ }
 }
 
+// How hard the rival tries. Kept per profile rather than per track, unlike the
+// mode and the lap count: those are about how you want to run one particular
+// course, and this is about you.
+const levelKey = () => profileKey('rivallevel');
+
+export function getRivalLevel() {
+  try { return levelById(localStorage.getItem(levelKey())).id; }
+  catch { return DEFAULT_LEVEL; }
+}
+
+export function setRivalLevel(id) {
+  try { localStorage.setItem(levelKey(), id); } catch { /* private mode */ }
+}
+
+export { RIVAL_LEVELS, levelById };
+
 // How the replay camera sits behind the car: back and up in the car's own
 // frame (so it banks and dips with the road exactly as the car does), tilted
 // down a little so the car sits in frame rather than at the bottom edge.
@@ -185,24 +201,22 @@ export class Game {
   // The car you race against, when the track was started as a race rather than
   // a time trial.
   //
-  // Working out how hard it should try means driving the whole track a handful
-  // of times, here, before the lights go out (see paceFor in game/driver.js) --
-  // about a quarter of a second, under the loading screen that is already on
-  // the way in. It is done per track *and* per car, because the same pace is a
-  // different lap time in each of the three.
+  // How hard it tries is a setting (see RIVAL_LEVELS in game/rival.js), not
+  // something worked out here. All that happens here is one check that the
+  // pace chosen can get round this particular track -- about 40 ms, under the
+  // loading screen that is already on the way in.
   loadRivalFor(def) {
     const r = this.renderer;
     if (this.rivalChunk) { r.dispose([this.rivalChunk]); this.rivalChunk = null; }
     this.rival = null;
     if (!def.race) return;
-    // Measured against your own best with this car, not the outright record:
-    // being chased by a car set to a time you have never got near with the
-    // machinery you are driving is not a race.
-    const mine = getCarBest(def.id, this.car0.id);
-    const seconds = rivalTarget(def, mine && mine.ms);
-    const solved = paceFor(this.track, this.car0.phys, seconds);
-    this.rival = new Rival(this.track, this.car0.phys, solved.pace);
-    this.rivalPredicted = solved.seconds;
+    const level = levelById(getRivalLevel());
+    // Checked rather than trusted: on a track with a loop there is a pace below
+    // which no car gets round at all, and a rival falling off the top of one
+    // forever is worse than a rival that is harder than it was set to be.
+    const pace = safePace(this.track, this.car0.phys, level.pace);
+    this.rival = new Rival(this.track, this.car0.phys, pace);
+    this.rivalLevel = level;
     this.rivalChunk = r.upload(buildRivalMesh());
   }
 

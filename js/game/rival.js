@@ -33,28 +33,39 @@ const TOUCH_U = 1.9;
 // road's half-width: out of the way, but well inside the kerbs.
 const LANE = ROAD_HALF * 0.52;
 
-// A rival should be a race, not a formality and not a wall. Its target is the
-// track's own target time -- the yardstick the game already has for "a good
-// lap here" -- until you are quicker than that, at which point it takes your
-// own best with this car and gives you a little back. It is worked out before
-// the lights go out and never changes during the race: the car ahead is not
-// waiting for you.
-const BEATEN_MARGIN = 1.03;
+// How hard the rival tries, as the pace its driver carries through corners --
+// a fraction of the grip the car actually has (see game/driver.js).
+//
+// It used to be solved for a time instead: bisection against the track's own
+// target time, which sounded principled and was wrong. A track's target is a
+// number for a *player* to aim at, and it is a generous one -- on the Costa
+// Verde it is 110 s, where the reference driver flat out does 80. Racing
+// against it meant racing a car braking to 98 km/h for a corner you take at
+// 155, and the race was over the first time the road bent. Measured rather
+// than guessed at, which is the only reason it was ever found.
+//
+// Pace straight through is also honest in a way a solved time is not: it is
+// how close to the limit the other driver is willing to go, which is the thing
+// a difficulty actually is. And it costs nothing to set up.
+export const RIVAL_LEVELS = [
+  // Costa Verde / Serra Alta / Vertigem, with the middle car: about
+  // 1:41 / 2:11 / 1:58.
+  { id: 'ameno', label: 'ameno', pace: 0.55 },
+  // 1:29 / 1:54 / 1:46. Quick enough that a clean lap is the price of winning.
+  { id: 'rapido', label: 'rápido', pace: 0.85 },
+  // 1:22 / 1:47 / 1:40, within a whisker of what this driver can do at all.
+  { id: 'impiedoso', label: 'impiedoso', pace: 1.15 },
+];
 
-export function rivalTarget(def, playerBestMs) {
-  // Every track carries one -- the built-in ones by hand, the built ones from
-  // their own length (world/customtracks.js) -- but a rival with no idea how
-  // hard to try is worse than a slightly wrong guess.
-  const target = def.target || 90;
-  if (!playerBestMs) return target;
-  const best = playerBestMs / 1000;
-  return best < target ? best * BEATEN_MARGIN : target;
-}
+export const DEFAULT_LEVEL = 'rapido';
+
+export const levelById = id =>
+  RIVAL_LEVELS.find(l => l.id === id) || RIVAL_LEVELS.find(l => l.id === DEFAULT_LEVEL);
 
 export class Rival {
-  // `pace` comes from paceFor (game/driver.js) -- solving for a time rather
-  // than guessing at a difficulty, because the same pace is a very different
-  // lap on a circuit of hairpins and on one of long straights.
+  // `pace` is how close to the limit it drives, from RIVAL_LEVELS above, after
+  // safePace (game/driver.js) has checked this particular track can be got
+  // round at it.
   constructor(track, phys, pace) {
     this.track = track;
     this.pace = pace;

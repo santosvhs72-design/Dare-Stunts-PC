@@ -23,10 +23,12 @@ export const gripOf = phys => (phys && phys.mu ? phys.mu : 1.45) * 9.81;
 // How hard to lean on the tyres, as a multiple of what the car actually has.
 // Below 1 is a driver leaving something in hand; above 1 is one carrying more
 // speed into a corner than the grip strictly allows and relying on the
-// understeer to wash it off. Measured on the Costa Verde, this runs a lap in
-// 113 s at 0.35 and 79 s at 1.3, smoothly and without crashing at either end,
-// which is what makes it something a difficulty can be solved for.
-export const PACE_MIN = 0.3;
+// understeer to wash it off.
+//
+// The useful range, measured on the Costa Verde with the middle car: 1:53 at
+// 0.35, 1:19 at 1.3, smoothly all the way and crashing at neither end. That
+// is the whole scale a difficulty has to live on, and RIVAL_LEVELS
+// (game/rival.js) picks three points off it.
 export const PACE_MAX = 1.35;
 
 // What the controls should be doing this instant.
@@ -73,10 +75,10 @@ export function plan(car, track, { pace = 1, wrap = false, lane = 0 } = {}) {
 // Drives the whole track, as fast as `pace` allows, and reports what happened.
 //
 // The editor uses this to answer "can this be finished at all" before letting
-// a built track be saved; the rival uses it to find out how hard it has to try
-// (see paceFor). It never wraps past the end, circuit or not: it is asking
-// about one run of the course, and a run that quietly went round again would
-// never finish.
+// a built track be saved; safePace below uses it to check that a rival set to
+// a given pace can get round. It never wraps past the end, circuit or not: it
+// is asking about one run of the course, and a run that quietly went round
+// again would never finish.
 export function testDrive(track, { aggression = 1, maxSeconds = 240, phys = null } = {}) {
   const car = new Car(track, phys);
   car.respawnS = 0;
@@ -116,31 +118,25 @@ export function testDrive(track, { aggression = 1, maxSeconds = 240, phys = null
   return { ok: false, seconds: t, crashes, topSpeed, failures, furthest: Math.round(furthest) };
 }
 
-// The pace that gets this car round this track in about `seconds`.
+// A pace this car can actually get round this track with.
 //
-// Solved rather than guessed, because the same pace means very different times
-// on a circuit of hairpins and on one of long straights -- the number that
-// matters to a player is the time, and the time is what a track's own target
-// is expressed in. Time falls smoothly as pace rises (113 s to 79 s across the
-// range on the Costa Verde), so a handful of bisection steps land close, and
-// each step costs about 40 ms.
+// Almost always the one asked for. The exception is the loop: a car that goes
+// through one too *slowly* falls off the top of it (see the normal load going
+// negative in Car.stepRoad), so on a track with a loop there is a floor below
+// which no amount of care gets round at all. A rival stuck at the bottom of a
+// loop, falling and trying again, is worse than a rival that is harder than
+// you asked for.
 //
-// Returns the pace and the time it actually produces, which is not always the
-// time asked for: at PACE_MIN the driver is still quicker than a slow target,
-// and at PACE_MAX it cannot go faster however much is asked of it.
-export function paceFor(track, phys, seconds, steps = 6) {
-  let lo = PACE_MIN, hi = PACE_MAX;
-  let best = null;
-  for (let i = 0; i < steps; i++) {
-    const mid = (lo + hi) / 2;
-    const r = testDrive(track, { aggression: mid, phys, maxSeconds: seconds * 3 + 60 });
-    // A pace that cannot finish the track is too fast for it, whatever the
-    // clock says -- treat it as such and look lower.
-    if (!r.ok) { hi = mid; continue; }
-    if (best === null || Math.abs(r.seconds - seconds) < Math.abs(best.seconds - seconds)) {
-      best = { pace: mid, seconds: r.seconds };
-    }
-    if (r.seconds > seconds) lo = mid; else hi = mid;
+// Note which way this goes. Everywhere else in a racing game a lap that fails
+// means going too fast; here the first thing to try is faster. One run of the
+// track costs about 40 ms.
+export function safePace(track, phys, wanted) {
+  if (testDrive(track, { aggression: wanted, phys }).ok) return wanted;
+  for (let p = wanted + 0.15; p <= PACE_MAX; p += 0.15) {
+    if (testDrive(track, { aggression: p, phys }).ok) return p;
   }
-  return best || { pace: PACE_MIN, seconds: null };
+  // Nothing gets round this. The editor does not let such a track be saved, so
+  // this is a built track from before it checked, or a shared one -- drive it
+  // at what was asked and let the checkpoints pick the car up.
+  return wanted;
 }
