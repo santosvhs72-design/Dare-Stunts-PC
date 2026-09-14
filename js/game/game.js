@@ -10,7 +10,7 @@ import { GhostRecorder, GhostPlayer, buildGhostMesh, ghostModelMatrix,
          loadGhost, saveGhost, clearGhost, lapSlice,
          GHOST_ALPHA, GHOST_AMBIENT } from './ghost.js';
 import { Rival, buildRivalMesh, RIVAL_LEVELS, DEFAULT_LEVEL, levelById } from './rival.js';
-import { safePace } from './driver.js';
+import { safePace, paceForShare } from './driver.js';
 import { profileKey } from '../ui/profiles.js';
 
 const bestKey = id => profileKey(`best.${id}`);
@@ -201,22 +201,30 @@ export class Game {
   // The car you race against, when the track was started as a race rather than
   // a time trial.
   //
-  // How hard it tries is a setting (see RIVAL_LEVELS in game/rival.js), not
-  // something worked out here. All that happens here is one check that the
-  // pace chosen can get round this particular track -- about 40 ms, under the
-  // loading screen that is already on the way in.
+  // How hard it tries is a setting (see RIVAL_LEVELS in game/rival.js), but
+  // what that setting means in this car on this track has to be worked out
+  // here -- about a fifth of a second, under the loading screen that is
+  // already on the way in.
   loadRivalFor(def) {
     const r = this.renderer;
     if (this.rivalChunk) { r.dispose([this.rivalChunk]); this.rivalChunk = null; }
     this.rival = null;
     if (!def.race) return;
     const level = levelById(getRivalLevel());
-    // Checked rather than trusted: on a track with a loop there is a pace below
-    // which no car gets round at all, and a rival falling off the top of one
-    // forever is worse than a rival that is harder than it was set to be.
-    const pace = safePace(this.track, this.car0.phys, level.pace);
+    // Solved here rather than stored, because how hard a given effort is
+    // depends entirely on the track (see paceForShare). Then checked: on a
+    // track with a loop there is a pace below which no car gets round at all,
+    // and a rival falling off the top of one forever is worse than a rival
+    // that is harder than it was set to be.
+    const solved = paceForShare(this.track, this.car0.phys, level.share);
+    // Only worth checking when the search never managed a clean run of the
+    // track -- otherwise the pace it came back with has already driven one.
+    const pace = solved.ok ? solved.pace
+      : safePace(this.track, this.car0.phys, solved.pace);
     this.rival = new Rival(this.track, this.car0.phys, pace);
     this.rivalLevel = level;
+    // What it is expected to do, for the result screen to compare against.
+    this.rivalPredicted = solved.seconds;
     this.rivalChunk = r.upload(buildRivalMesh());
   }
 

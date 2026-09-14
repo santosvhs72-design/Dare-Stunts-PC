@@ -37,10 +37,12 @@ Por ordem do que mais se nota:
    em que se olha, em vez de ser mantida igual ao horizonte à mão.
 5. **Efeitos** — reflexo de estrada molhada, pó nas bermas, marcas de travagem.
 
-Uma coisa que o adversário ainda não tem: linha de corrida. Conduz o meio da
-estrada e trava para o que vem a seguir, e é só isso — não corta as curvas por
-dentro. É rápido o suficiente para ganhar à maioria das voltas e lento o
-suficiente para ser batido por uma boa.
+Uma coisa que o adversário ainda não tem: **linha de corrida**. Conduz o meio
+da estrada e trava para o que vem a seguir, e é só isso. É por aqui que ele
+ficará mais rápido, e está medido quanto vale: a linha que minimiza a
+curvatura dentro da largura da pista alivia a curva mais fechada em 0% na
+Costa Verde (as curvas já são abertas de mais para a largura contar), 4% na
+Vertigem e 11% na Serra Alta.
 
 Duas coisas a fazer que não estão nesta lista: as luzes do tecto de um túnel
 deviam ser emissivas e brilhar, e para isso precisam de ser uma malha à parte
@@ -75,9 +77,15 @@ fábrica:
 
 | | Costa Verde | Serra Alta | Vertigem |
 |---|---|---|---|
-| ameno | 1:41 | 2:11 | 1:58 |
-| rápido *(por omissão)* | 1:29 | 1:56 | 1:47 |
-| impiedoso | 1:22 | 1:47 | 1:40 |
+| ameno | 1:38 | 2:01 | 1:55 |
+| rápido *(por omissão)* | 1:26 | 1:47 | 1:41 |
+| impiedoso | 1:18 | 1:37 | 1:32 |
+
+O **impiedoso** não é um número escolhido: é tudo o que o condutor de
+referência tem nessa pista com esse carro, resolvido antes da partida. Os
+outros dois são uma distância declarada atrás disso. Para o adversário passar
+daqui é preciso ensiná-lo a conduzir melhor, não a arriscar mais — a arriscar
+mais já não rende nada.
 
 ## Comandos
 

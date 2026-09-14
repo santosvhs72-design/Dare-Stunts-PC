@@ -22,14 +22,19 @@ export const gripOf = phys => (phys && phys.mu ? phys.mu : 1.45) * 9.81;
 
 // How hard to lean on the tyres, as a multiple of what the car actually has.
 // Below 1 is a driver leaving something in hand; above 1 is one carrying more
-// speed into a corner than the grip strictly allows and relying on the
-// understeer to wash it off.
+// speed into a corner than the grip strictly allows, letting the understeer
+// wash it off and occasionally brushing a barrier.
 //
-// The useful range, measured on the Costa Verde with the middle car: 1:53 at
-// 0.35, 1:19 at 1.3, smoothly all the way and crashing at neither end. That
-// is the whole scale a difficulty has to live on, and RIVAL_LEVELS
-// (game/rival.js) picks three points off it.
-export const PACE_MAX = 1.35;
+// This one is as fast as this driver goes, and it is not the largest number
+// that could go here -- it is the one past which nothing gets faster.
+//
+// Measured on all three tracks: at 1.7 the Serra Alta comes out at 1:37 with
+// the car against a barrier 4% of the time; at 2.5 it comes out at 1:38 with
+// it against a barrier 13% of the time. Everything gained by carrying more
+// speed into the corner is handed straight back to the wall on the way out,
+// and the car looks like it is being driven badly while doing it. There is no
+// setting above this worth having, only one that looks worse.
+export const PACE_FLAT_OUT = 1.7;
 
 // What the controls should be doing this instant.
 //
@@ -128,15 +133,51 @@ export function testDrive(track, { aggression = 1, maxSeconds = 240, phys = null
 // you asked for.
 //
 // Note which way this goes. Everywhere else in a racing game a lap that fails
-// means going too fast; here the first thing to try is faster. One run of the
-// track costs about 40 ms.
+// means going too fast; here the first thing to try is faster.
 export function safePace(track, phys, wanted) {
   if (testDrive(track, { aggression: wanted, phys }).ok) return wanted;
-  for (let p = wanted + 0.15; p <= PACE_MAX; p += 0.15) {
+  for (let p = wanted + 0.15; p <= PACE_FLAT_OUT; p += 0.15) {
     if (testDrive(track, { aggression: p, phys }).ok) return p;
   }
   // Nothing gets round this. The editor does not let such a track be saved, so
   // this is a built track from before it checked, or a shared one -- drive it
   // at what was asked and let the checkpoints pick the car up.
   return wanted;
+}
+
+// The pace that gets this car round this track in a given share of the time it
+// takes flat out. `share` of 1 is flat out; 0.9 is a tenth slower than that.
+//
+// Solved per track, because pace does not mean the same thing on two different
+// tracks. On the Costa Verde, whose corners are so open that the car is
+// hardly ever grip-limited at all, going from 1.15 to flat out is worth three
+// seconds; on the Serra Alta it is worth seven, and on the Vertigem ten. A
+// difficulty picked as a bare pace is therefore a different difficulty on
+// every track -- which is exactly the mistake that made the hardest rival
+// beatable without trying on the two tracks that have real corners.
+//
+// Costs one run of the track for the reference time plus a handful for the
+// search, about 40 ms each, under the loading screen that is already there.
+export function paceForShare(track, phys, share) {
+  const flat = testDrive(track, { aggression: PACE_FLAT_OUT, phys });
+  if (share >= 1 || !flat.ok) {
+    return { pace: PACE_FLAT_OUT, seconds: flat.seconds, ok: flat.ok };
+  }
+  const target = flat.seconds / share;
+
+  let lo = 0.3, hi = PACE_FLAT_OUT, best = null;
+  for (let i = 0; i < 5; i++) {
+    const mid = (lo + hi) / 2;
+    const r = testDrive(track, { aggression: mid, phys, maxSeconds: target * 2 + 60 });
+    // Not finishing means too slow for the loop, not too fast for the corner
+    // -- see safePace. So look higher, never lower.
+    if (!r.ok) { lo = mid; continue; }
+    if (!best || Math.abs(r.seconds - target) < Math.abs(best.seconds - target)) {
+      // `ok` because this pace was just driven round the whole track: the
+      // caller does not need to check it again.
+      best = { pace: mid, seconds: r.seconds, ok: true };
+    }
+    if (r.seconds > target) lo = mid; else hi = mid;
+  }
+  return best || { pace: PACE_FLAT_OUT, seconds: flat.seconds, ok: flat.ok };
 }

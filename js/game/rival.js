@@ -33,28 +33,31 @@ const TOUCH_U = 1.9;
 // road's half-width: out of the way, but well inside the kerbs.
 const LANE = ROAD_HALF * 0.52;
 
-// How hard the rival tries, as the pace its driver carries through corners --
-// a fraction of the grip the car actually has (see game/driver.js).
+// How hard the rival tries, as a share of the time the reference driver needs
+// for this track flat out (see paceForShare in game/driver.js).
 //
-// It used to be solved for a time instead: bisection against the track's own
-// target time, which sounded principled and was wrong. A track's target is a
-// number for a *player* to aim at, and it is a generous one -- on the Costa
-// Verde it is 110 s, where the reference driver flat out does 80. Racing
-// against it meant racing a car braking to 98 km/h for a corner you take at
-// 155, and the race was over the first time the road bent. Measured rather
-// than guessed at, which is the only reason it was ever found.
+// A share and not a pace, and that distinction is the whole of this setting's
+// history. It was a time first -- bisection against the track's own target --
+// and that was wrong because a track's target is a generous number meant for a
+// player. Then it was a bare pace, and that was wrong too, in a way that took
+// longer to see: pace is a fraction of the car's grip, so it only bites where
+// grip is what limits the car. On the Costa Verde, whose corners are wide
+// enough that the car is barely ever grip-limited, 1.15 was within three
+// seconds of flat out. On the Serra Alta it was seven off, and on the Vertigem
+// ten -- the hardest rival in the game, leaving ten seconds on the table on
+// the track with the tightest corners.
 //
-// Pace straight through is also honest in a way a solved time is not: it is
-// how close to the limit the other driver is willing to go, which is the thing
-// a difficulty actually is. And it costs nothing to set up.
+// A share fixes that by construction: 1.0 is flat out on whatever track this
+// is, and every other level is a stated distance behind it.
 export const RIVAL_LEVELS = [
-  // Costa Verde / Serra Alta / Vertigem, with the middle car: about
-  // 1:41 / 2:11 / 1:58.
-  { id: 'ameno', label: 'ameno', pace: 0.55 },
-  // 1:29 / 1:54 / 1:46. Quick enough that a clean lap is the price of winning.
-  { id: 'rapido', label: 'rápido', pace: 0.85 },
-  // 1:22 / 1:47 / 1:40, within a whisker of what this driver can do at all.
-  { id: 'impiedoso', label: 'impiedoso', pace: 1.15 },
+  // About 25% off the pace, which is a comfortable win for a clean lap.
+  { id: 'ameno', label: 'ameno', share: 0.80 },
+  // Close enough that a good lap wins and a merely tidy one does not.
+  { id: 'rapido', label: 'rápido', share: 0.91 },
+  // Everything the reference driver has: never lifting, corners taken at
+  // whatever the tyres will still hold, the odd barrier brushed. There is
+  // nothing above this without teaching it to drive better.
+  { id: 'impiedoso', label: 'impiedoso', share: 1 },
 ];
 
 export const DEFAULT_LEVEL = 'rapido';
@@ -63,9 +66,8 @@ export const levelById = id =>
   RIVAL_LEVELS.find(l => l.id === id) || RIVAL_LEVELS.find(l => l.id === DEFAULT_LEVEL);
 
 export class Rival {
-  // `pace` is how close to the limit it drives, from RIVAL_LEVELS above, after
-  // safePace (game/driver.js) has checked this particular track can be got
-  // round at it.
+  // `pace` is how close to the limit it drives -- solved for this track and
+  // this car by paceForShare (game/driver.js) from the chosen level's share.
   constructor(track, phys, pace) {
     this.track = track;
     this.pace = pace;
