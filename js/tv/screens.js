@@ -19,6 +19,7 @@ import { activePad, allPads } from '../ui/pads.js';
 import { textEntry } from './keyboard.js';
 import { listProfiles, activeProfileId, isDefaultProfile,
          createProfile, renameProfile, deleteProfile } from '../ui/profiles.js';
+import { canInstall, install, onChange } from '../ui/install.js';
 
 export const esc = s => String(s).replace(/[&<>"]/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -65,6 +66,14 @@ export function homeScreen(app) {
   ];
   let i = 0;
 
+  // Installing is offered rather than advertised, and only while there is
+  // something to offer: a browser decides for itself whether the game
+  // qualifies, and may decide so seconds after this screen is drawn -- hence
+  // the listener, which redraws the menu when the answer changes.
+  const withInstall = () => (canInstall()
+    ? [...items, { id: 'install', label: 'Instalar', hint: 'jogar sem browser à volta' }]
+    : items);
+
   const el = node(`<div class="screen"><div class="safe">
     <div class="homewrap">
       <div class="homeside">
@@ -78,28 +87,33 @@ export function homeScreen(app) {
   </div></div>`);
 
   const paint = () => {
-    const byId = id => items.find(it => it.id === id);
+    const shown = withInstall();
+    const byId = id => shown.find(it => it.id === id);
     byId('sound').hint = app.sound.muted ? 'desligado' : 'ligado';
     const active = listProfiles().find(p => p.id === activeProfileId());
     byId('profile').hint = active ? active.name : '';
-    el.querySelector('#menu').innerHTML = items.map((it, n) =>
+    if (i >= shown.length) i = shown.length - 1;
+    el.querySelector('#menu').innerHTML = shown.map((it, n) =>
       `<div class="item${n === i ? ' on' : ''}">${esc(it.label)}
         <span class="hint">${esc(it.hint)}</span></div>`).join('');
   };
   paint();
+  onChange(paint);
 
   return {
     el,
     resumed: paint,   // coming back from the profiles screen, the name may have changed
     key(a) {
-      if (a === 'up') { i = (i - 1 + items.length) % items.length; paint(); }
-      else if (a === 'down') { i = (i + 1) % items.length; paint(); }
+      const shown = withInstall();
+      if (a === 'up') { i = (i - 1 + shown.length) % shown.length; paint(); }
+      else if (a === 'down') { i = (i + 1) % shown.length; paint(); }
       else if (a === 'ok') {
-        const id = items[i].id;
+        const id = shown[i].id;
         if (id === 'play') app.push(carScreen(app));
         else if (id === 'build') app.openEditor(null);
         else if (id === 'profile') app.push(profilesScreen(app));
         else if (id === 'pad') app.push(padScreen(app));
+        else if (id === 'install') install().then(paint);
         else { app.sound.setMuted(!app.sound.muted); paint(); }
       }
     },

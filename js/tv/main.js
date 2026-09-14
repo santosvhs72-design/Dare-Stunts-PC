@@ -14,6 +14,7 @@ import { setActiveProfile } from '../ui/profiles.js';
 import { keyValue } from '../ui/keys.js';
 import { TvInput } from './input.js';
 import { homeScreen, node, esc } from './screens.js';
+import { enableOffline } from '../ui/install.js';
 import { editorScreen } from './editor.js';
 
 const ui = document.getElementById('ui');
@@ -370,3 +371,7 @@ game.car0 = app.car;   // the Game drives whichever car the picker last confirme
 // draws them, so it stays exactly as it was. On by default, until turned off.
 game.showGhost = ghostShown();
 app.push(homeScreen(app));
+
+// Last, so the service worker never competes with the game's own files for
+// the first connections: what it is for is the second visit.
+enableOffline();

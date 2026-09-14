@@ -58,6 +58,28 @@ módulos ES exigem um contexto seguro, e `file://` não é um:
 python3 -m http.server 8765
 ```
 
+## Instalar
+
+O jogo é uma PWA: no browser, **Instalar** aparece no menu inicial assim que o
+browser decidir que ele se qualifica, e passa a abrir em ecrã inteiro sem
+browser à volta. Não é o jogo que decide isso — é o browser, e por isso a
+entrada só existe quando há de facto alguma coisa para instalar.
+
+Depois da primeira visita funciona **sem rede**: não há servidor nenhum do lado
+de lá, e nunca houve. As pistas, os recordes e os fantasmas estão todos no
+browser.
+
+O service worker é *network-first*: online serve sempre o que está no disco, e
+só cai para a cópia guardada quando não há rede. Cache-first arrancaria um
+pouco mais depressa e serviria os módulos de ontem depois de cada alteração,
+que num repositório cujo assunto é mudar o aspecto das coisas é uma tarde
+garantida a perseguir um bug já corrigido.
+
+A lista de ficheiros em `sw.js` é escrita à mão e há-de ficar desactualizada,
+por isso nada depende de ela estar completa: um ficheiro que falte é guardado
+na primeira vez que o jogo o pedir, e um que já não exista é saltado em vez de
+deitar a instalação abaixo.
+
 ## Corrida ou contra o relógio
 
 Cada pista pode ser corrida das duas maneiras, e a escolha fica guardada por
