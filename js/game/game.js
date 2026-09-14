@@ -1,5 +1,5 @@
 import { Renderer } from '../core/renderer.js';
-import { MAT } from '../core/materials.js';
+import { MAT, surface } from '../core/materials.js';
 import { buildTrack } from '../world/track.js';
 import { buildSky, buildGround, buildScenery, skyFogColor, skyAmbient } from '../world/scenery.js';
 import { Car, MODE, gearFor } from './car.js';
@@ -467,13 +467,13 @@ export class Game {
       // reads nothing like the faint record-holder ghost drawn alongside a
       // race in progress below.
       dynamic.push({ chunk: this.replayChunk, model: ghostModelMatrix(this.replayPose),
-                     material: { ambient: 1 }, alpha: 1 });
+                     material: surface(1), alpha: 1 });
     } else if (this.showGhost && this.ghost && this.ghostChunk
         && this.state !== STATE.COUNTDOWN) {
       const pose = this.ghost.at(this.lapTime());
       if (pose) {
         dynamic.push({ chunk: this.ghostChunk, model: ghostModelMatrix(pose),
-                       material: { ambient: GHOST_AMBIENT }, alpha: GHOST_ALPHA });
+                       material: surface(GHOST_AMBIENT), alpha: GHOST_ALPHA });
       }
     }
 
@@ -483,6 +483,12 @@ export class Game {
     // of them looks at the world from the sun rather than from the car.
     r.renderFrame({
       camera: { q: camQuat, pos: camPos, fov },
+      // The lamps ride the car, not the camera -- the two are the same thing
+      // from the driver's seat, and are not during a replay, where the camera
+      // has pulled back and the beams have to stay with the bodywork.
+      headlights: this.state === STATE.REPLAY && this.replayPose
+        ? { q: this.replayPose.q, pos: this.replayPose.pos }
+        : { q: car.camQuat, pos: car.camPos },
       sky: this.chunks.sky,
       // A dusk or twilight preset lowers this a little, never far: a
       // material's ambient is a brightness floor, and the road still has to

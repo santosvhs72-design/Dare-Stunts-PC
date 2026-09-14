@@ -1,4 +1,4 @@
-import { mat4, v3, frustumPlanes, sphereVisible } from './math.js';
+import { mat4, v3, quat, frustumPlanes, sphereVisible } from './math.js';
 import { hex } from './mesh.js';
 import { program, Target, screenPass } from './gl.js';
 import { ATTR, SCENE_VS, SCENE_FS } from './shaders/scene.js';
@@ -19,6 +19,21 @@ const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 
 // does nothing for it. So the samples are asked for explicitly here, and
 // resolved by hand afterwards.
 const SAMPLES = 4;
+
+// Where the lamps sit relative to whatever is carrying them, in its own frame:
+// out to the sides, forward of the driver, and below eye level. In the
+// cockpit view there is no car body to measure from -- the camera is the
+// driver's head -- so these are measured from there, which puts them roughly
+// where a real pair would be on the car you cannot see.
+const HEAD_SIDE = 0.62;     // m, either side of centre
+const HEAD_FWD = 1.7;       // m, ahead
+const HEAD_DOWN = 0.62;     // m, below the eyes
+const HEAD_DIP = 0.05;      // rad, aimed down: dipped beams, not full
+// How bright the pool gets at its centre, before the cone and the falloff take
+// anything away. Over 1 on purpose -- a headlight blows out what is directly
+// in front of it, and the buffer this lands in is now wide enough to hold
+// that until there is a tone map to bring it back down.
+const HEAD_STRENGTH = 1.5;
 
 export class Renderer {
   constructor(canvas) {
@@ -49,6 +64,9 @@ export class Renderer {
     this.fogNear = 150;
     this.fogFar = 460;
     this.cullDistance = 540;
+    this.headStrength = HEAD_STRENGTH;
+    this.headPos = new Float32Array(6);
+    this.headDir = [0, 0, 1];
     this.resize();
   }
 
@@ -127,10 +145,29 @@ export class Renderer {
     this.camPos = cam.pos;
     this.planes = frustumPlanes(mat4.mul(this.proj, this.viewMat));
     this.ambientScale = sc.ambient || 1;
+    this.aimHeadlights(sc.headlights);
 
     this.scenePass(sc);
     this.hdr.blitTo(this.resolved);
     this.presentPass();
+  }
+
+  // Puts the two lamps where the car is and points them where it points. The
+  // car's own frame, not the world's: inside a loop the beams go round with
+  // it, and on a corkscrew they roll.
+  aimHeadlights(h) {
+    if (!h) { this.headOn = false; return; }
+    this.headOn = true;
+    const fwd = quat.fwd(h.q), up = quat.up(h.q), right = quat.right(h.q);
+    const base = v3.mad(v3.mad(h.pos, fwd, HEAD_FWD), up, -HEAD_DOWN);
+    for (const [i, side] of [[0, -1], [1, 1]]) {
+      const p = v3.mad(base, right, side * HEAD_SIDE);
+      this.headPos[i * 3] = p[0];
+      this.headPos[i * 3 + 1] = p[1];
+      this.headPos[i * 3 + 2] = p[2];
+    }
+    // Dipped, so the pool lands on the road ahead rather than on the horizon.
+    this.headDir = v3.norm(v3.mad(fwd, up, -HEAD_DIP));
   }
 
   // The world, into the multisampled off-screen buffer.
@@ -149,6 +186,10 @@ export class Renderer {
     gl.uniform3fv(u.uFogColor, this.fogColor);
     gl.uniform1f(u.uFogNear, this.fogNear);
     gl.uniform1f(u.uFogFar, this.fogFar);
+    gl.uniform3fv(u.uCamPos, this.camPos);
+    gl.uniform3fv(u.uHeadPos, this.headPos);
+    gl.uniform3fv(u.uHeadDir, this.headDir);
+    gl.uniform1f(u.uHeadStrength, this.headOn ? this.headStrength : 0);
 
     if (sc.sky) this.drawSky(sc.sky);
     for (const g of sc.groups || []) this.drawGroup(g);
@@ -164,6 +205,9 @@ export class Renderer {
     gl.uniform1f(u.uLit, 0);
     gl.uniform1f(u.uFogScale, 0);
     gl.uniform1f(u.uAmbient, 1);
+    // uLit at 0 already gates every lit term, but a glint on the sky dome
+    // would be the one thing that could still get through.
+    gl.uniform1f(u.uSpecular, 0);
     gl.bindVertexArray(chunk.vao);
     gl.drawArrays(gl.TRIANGLES, 0, chunk.count);
     gl.enable(gl.DEPTH_TEST);
@@ -177,6 +221,8 @@ export class Renderer {
     gl.uniform1f(u.uLit, 1);
     gl.uniform1f(u.uFogScale, 1);
     gl.uniform1f(u.uAmbient, material.ambient * this.ambientScale);
+    gl.uniform1f(u.uSpecular, material.specular || 0);
+    gl.uniform1f(u.uShine, material.shine || 1);
     const cull = this.cullDistance;
     for (const c of chunks) {
       if (!c || !c.count) continue;
@@ -201,6 +247,8 @@ export class Renderer {
     gl.uniform1f(u.uLit, 1);
     gl.uniform1f(u.uFogScale, 1);
     gl.uniform1f(u.uAmbient, material.ambient);
+    gl.uniform1f(u.uSpecular, material.specular || 0);
+    gl.uniform1f(u.uShine, material.shine || 1);
     gl.uniform1f(u.uAlpha, alpha);
     gl.bindVertexArray(chunk.vao);
     gl.drawArrays(gl.TRIANGLES, 0, chunk.count);
