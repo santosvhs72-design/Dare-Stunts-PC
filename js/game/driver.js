@@ -51,27 +51,52 @@ export function plan(car, track, { pace = 1, wrap = false, lane = 0 } = {}) {
   const grip = gripOf(car.phys);
   const budget = grip * pace;
   const f = track.frameAt(car.s);
+  const v = Math.abs(car.v);
+  // What the car can actually shed, near enough. Car.stepRoad caps braking at
+  // what grip allows, which is less than this over a crest and on the kerb --
+  // being a little optimistic here means braking a little late there, which is
+  // what a driver does too.
+  const brake = car.phys.brake * 0.9;
 
-  // The tightest thing between here and as far ahead as the car would take to
-  // slow down for it.
-  let maxK = 0, loopK = 0;
-  const ahead = Math.max(22, car.v * 1.5 + 20);
-  for (let d = 5; d < ahead; d += 5) {
-    const g = track.frameAt(wrap ? car.s + d : Math.min(car.s + d, track.length - 1));
-    maxK = Math.max(maxK, Math.abs(g.kRight));
+  // Look exactly as far as it takes to stop from here, plus a margin. Any
+  // further and the road being read has no bearing on what the pedals should
+  // be doing now.
+  const horizon = v * v / (2 * brake) + 30;
+
+  let vT = car.phys.vmax;
+  let loopMin = 0;
+  for (let d = 0; d < horizon; d += 4) {
+    const g = d === 0 ? f
+      : track.frameAt(wrap ? car.s + d : Math.min(car.s + d, track.length - 1));
+    const k = Math.abs(g.kRight);
+    if (k > 1e-4) {
+      // How fast the car may be *there*, and therefore how fast it may be
+      // *here* and still arrive at that speed.
+      //
+      // This is the whole difference between a driver and a speed limit. The
+      // old version took the tightest corner anywhere in its lookahead and
+      // drove at that speed for the entire stretch -- so it was already down
+      // to 152 km/h a hundred metres before the Costa Verde's first bend,
+      // which is a 131 m radius it could have taken at 203, and it stayed at
+      // 152 all the way through and out the other side. Both halves of that
+      // are fixed by the same line: far away, 2*a*d swamps the corner and it
+      // does not slow down at all; on the way out, the corner behind it stops
+      // counting and it is back on the throttle.
+      const vSafe = Math.sqrt(budget / k);
+      const allowed = Math.sqrt(vSafe * vSafe + 2 * brake * d);
+      if (allowed < vT) vT = allowed;
+    }
     // Vertical curvature is a loop, and a loop is the opposite problem: too
-    // slow and the car falls off the top of it.
-    if (g.kUp > 0.008) loopK = Math.max(loopK, g.kUp);
+    // slow and the car falls off the top of it. A floor, not a ceiling.
+    if (g.kUp > 0.008) loopMin = Math.max(loopMin, Math.sqrt(5 * 9.81 / g.kUp) * 1.18);
   }
-  let vT = maxK > 1e-4 ? Math.sqrt(budget / maxK) : 999;
-  if (loopK > 0) vT = Math.max(vT, Math.sqrt(5 * 9.81 / loopK) * 1.18);
-  vT = Math.min(vT, car.phys.vmax);
+  vT = Math.min(Math.max(vT, loopMin), car.phys.vmax);
 
   return {
-    throttle: car.v < vT ? 1 : 0,
-    brake: car.v > vT * 1.06 ? 1 : 0,
+    throttle: v < vT ? 1 : 0,
+    brake: v > vT * 1.06 ? 1 : 0,
     // Enough lock to hold the bend at this speed, plus two corrections: back
-    // towards the middle of the road, and back in line with it.
+    // towards the line being driven, and back in line with it.
     steer: clamp(car.v * car.v * f.kRight / grip - (car.u - lane) * 0.055 - car.psi * 1.7, -1, 1),
     handbrake: false,
   };
@@ -145,39 +170,39 @@ export function safePace(track, phys, wanted) {
   return wanted;
 }
 
-// The pace that gets this car round this track in a given share of the time it
-// takes flat out. `share` of 1 is flat out; 0.9 is a tenth slower than that.
+// The fastest this driver gets round this track at all, in seconds.
+export function flatOutTime(track, phys) {
+  const r = testDrive(track, { aggression: PACE_FLAT_OUT, phys });
+  return r.ok ? r.seconds : null;
+}
+
+// The pace that gets this car round this track in about `seconds`.
 //
 // Solved per track, because pace does not mean the same thing on two different
-// tracks. On the Costa Verde, whose corners are so open that the car is
-// hardly ever grip-limited at all, going from 1.15 to flat out is worth three
-// seconds; on the Serra Alta it is worth seven, and on the Vertigem ten. A
-// difficulty picked as a bare pace is therefore a different difficulty on
-// every track -- which is exactly the mistake that made the hardest rival
-// beatable without trying on the two tracks that have real corners.
+// tracks. Pace is a fraction of the car's grip, so it only bites where grip is
+// what limits the car: on the Costa Verde, whose corners are wide enough that
+// the car is barely ever grip-limited, going from 1.15 to flat out is worth
+// three seconds; on the Serra Alta it is worth seven and on the Vertigem ten.
+// A difficulty chosen as a bare pace is therefore a different difficulty on
+// every track.
 //
-// Costs one run of the track for the reference time plus a handful for the
-// search, about 40 ms each, under the loading screen that is already there.
-export function paceForShare(track, phys, share) {
-  const flat = testDrive(track, { aggression: PACE_FLAT_OUT, phys });
-  if (share >= 1 || !flat.ok) {
-    return { pace: PACE_FLAT_OUT, seconds: flat.seconds, ok: flat.ok };
-  }
-  const target = flat.seconds / share;
-
+// Five runs of the track, about 50 ms each, under the loading screen that is
+// already there. Never returns anything faster than flat out, because there is
+// nothing faster to return.
+export function paceForTime(track, phys, seconds) {
   let lo = 0.3, hi = PACE_FLAT_OUT, best = null;
   for (let i = 0; i < 5; i++) {
     const mid = (lo + hi) / 2;
-    const r = testDrive(track, { aggression: mid, phys, maxSeconds: target * 2 + 60 });
+    const r = testDrive(track, { aggression: mid, phys, maxSeconds: seconds * 2 + 60 });
     // Not finishing means too slow for the loop, not too fast for the corner
     // -- see safePace. So look higher, never lower.
     if (!r.ok) { lo = mid; continue; }
-    if (!best || Math.abs(r.seconds - target) < Math.abs(best.seconds - target)) {
+    if (!best || Math.abs(r.seconds - seconds) < Math.abs(best.seconds - seconds)) {
       // `ok` because this pace was just driven round the whole track: the
       // caller does not need to check it again.
       best = { pace: mid, seconds: r.seconds, ok: true };
     }
-    if (r.seconds > target) lo = mid; else hi = mid;
+    if (r.seconds > seconds) lo = mid; else hi = mid;
   }
-  return best || { pace: PACE_FLAT_OUT, seconds: flat.seconds, ok: flat.ok };
+  return best || { pace: PACE_FLAT_OUT, seconds: null, ok: false };
 }

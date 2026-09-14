@@ -33,37 +33,52 @@ const TOUCH_U = 1.9;
 // road's half-width: out of the way, but well inside the kerbs.
 const LANE = ROAD_HALF * 0.52;
 
-// How hard the rival tries, as a share of the time the reference driver needs
-// for this track flat out (see paceForShare in game/driver.js).
+// How hard the rival tries.
 //
-// A share and not a pace, and that distinction is the whole of this setting's
-// history. It was a time first -- bisection against the track's own target --
-// and that was wrong because a track's target is a generous number meant for a
-// player. Then it was a bare pace, and that was wrong too, in a way that took
-// longer to see: pace is a fraction of the car's grip, so it only bites where
-// grip is what limits the car. On the Costa Verde, whose corners are wide
-// enough that the car is barely ever grip-limited, 1.15 was within three
-// seconds of flat out. On the Serra Alta it was seven off, and on the Vertigem
-// ten -- the hardest rival in the game, leaving ten seconds on the table on
-// the track with the tightest corners.
+// Two numbers, because there are two ways of knowing what a good lap here is
+// and the better one is not always available.
 //
-// A share fixes that by construction: 1.0 is flat out on whatever track this
-// is, and every other level is a stated distance behind it.
+// `share` is a fraction of the time the reference driver needs for this track
+// flat out. It always works, and it is all there is the first time a track is
+// raced. A share and not a bare pace: pace is a fraction of the car's grip, so
+// it only bites where grip is what limits the car -- on the Costa Verde, whose
+// corners are wide, a pace of 1.15 was within three seconds of flat out, while
+// on the Vertigem it was ten off. A share is the same difficulty everywhere by
+// construction.
+//
+// `margin` is what to do once there is a record on this track with this car,
+// which is a far better answer to "what is a good lap here": your own best,
+// plus a little. Deliberately plus, not equal -- a rival set to exactly your
+// best is one you can only ever draw with.
+//
+// The record can only make it harder, never easier: it is read as a ceiling on
+// the time, floored by what `share` already asked for. A first lap spent in
+// the scenery should not hand you a rival that crawls.
 export const RIVAL_LEVELS = [
-  // About 25% off the pace, which is a comfortable win for a clean lap.
-  { id: 'ameno', label: 'ameno', share: 0.80 },
-  // Close enough that a good lap wins and a merely tidy one does not.
-  { id: 'rapido', label: 'rápido', share: 0.91 },
-  // Everything the reference driver has: never lifting, corners taken at
-  // whatever the tyres will still hold, the odd barrier brushed. There is
-  // nothing above this without teaching it to drive better.
-  { id: 'impiedoso', label: 'impiedoso', share: 1 },
+  { id: 'ameno', label: 'ameno', share: 0.80, margin: 1.12 },
+  { id: 'rapido', label: 'rápido', share: 0.91, margin: 1.05 },
+  // Nothing above this: it is everything the reference driver has.
+  { id: 'impiedoso', label: 'impiedoso', share: 1, margin: 1.01 },
 ];
 
 export const DEFAULT_LEVEL = 'rapido';
 
 export const levelById = id =>
   RIVAL_LEVELS.find(l => l.id === id) || RIVAL_LEVELS.find(l => l.id === DEFAULT_LEVEL);
+
+// What time to aim the rival at, in seconds.
+//
+//   flatOut   the fastest the reference driver gets round this track at all
+//   recordMs  your best here with this car, if there is one
+//
+// Never faster than flat out, because there is nothing faster to ask for, and
+// never slower than the level's own share of flat out.
+export function rivalTime(level, flatOut, recordMs) {
+  const byShare = flatOut / level.share;
+  if (!recordMs) return byShare;
+  const byRecord = (recordMs / 1000) * level.margin;
+  return Math.max(flatOut, Math.min(byShare, byRecord));
+}
 
 export class Rival {
   // `pace` is how close to the limit it drives -- solved for this track and

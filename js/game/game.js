@@ -9,8 +9,8 @@ import { clamp, quat, v3 } from '../core/math.js';
 import { GhostRecorder, GhostPlayer, buildGhostMesh, ghostModelMatrix,
          loadGhost, saveGhost, clearGhost, lapSlice,
          GHOST_ALPHA, GHOST_AMBIENT } from './ghost.js';
-import { Rival, buildRivalMesh, RIVAL_LEVELS, DEFAULT_LEVEL, levelById } from './rival.js';
-import { safePace, paceForShare } from './driver.js';
+import { Rival, buildRivalMesh, RIVAL_LEVELS, DEFAULT_LEVEL, levelById, rivalTime } from './rival.js';
+import { safePace, paceForTime, flatOutTime } from './driver.js';
 import { profileKey } from '../ui/profiles.js';
 
 const bestKey = id => profileKey(`best.${id}`);
@@ -211,14 +211,18 @@ export class Game {
     this.rival = null;
     if (!def.race) return;
     const level = levelById(getRivalLevel());
-    // Solved here rather than stored, because how hard a given effort is
-    // depends entirely on the track (see paceForShare). Then checked: on a
-    // track with a loop there is a pace below which no car gets round at all,
-    // and a rival falling off the top of one forever is worse than a rival
-    // that is harder than it was set to be.
-    const solved = paceForShare(this.track, this.car0.phys, level.share);
+    // Your own best here with this car is the best answer there is to "what is
+    // a good lap on this track", so it is used the moment there is one -- see
+    // rivalTime. Until then, a share of what the reference driver can do.
+    const mine = getCarBest(def.id, this.car0.id);
+    const flatOut = flatOutTime(this.track, this.car0.phys);
+    const seconds = rivalTime(level, flatOut, mine && mine.ms);
+    const solved = paceForTime(this.track, this.car0.phys, seconds);
     // Only worth checking when the search never managed a clean run of the
-    // track -- otherwise the pace it came back with has already driven one.
+    // track -- otherwise the pace it came back with has already driven one. On
+    // a track with a loop there is a pace below which no car gets round at
+    // all, and a rival falling off the top of one forever is worse than a
+    // rival harder than it was set to be.
     const pace = solved.ok ? solved.pace
       : safePace(this.track, this.car0.phys, solved.pace);
     this.rival = new Rival(this.track, this.car0.phys, pace);
