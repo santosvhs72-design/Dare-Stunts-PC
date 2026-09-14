@@ -7,7 +7,8 @@
 import { CARS, carById } from '../game/cars.js';
 import { TRACKS } from '../world/tracks.js';
 import { getBest, getCarBests, clearRecord,
-         getLaps, setLaps, LAP_CHOICES } from '../game/game.js';
+         getLaps, setLaps, LAP_CHOICES,
+         getRaceMode, setRaceMode, MODE_RACE, MODE_TIME } from '../game/game.js';
 import { formatTime } from '../game/hud.js';
 import { loadCustom, loadShared, deleteCustom, setTrackShared } from '../world/customtracks.js';
 import { walkTrack } from '../world/track.js';
@@ -363,6 +364,16 @@ export function trackScreen(app, { shared = false } = {}) {
     return walks.get(t.id);
   };
   const isCircuit = t => !!(walked(t) && walked(t).closed);
+  const isRace = t => getRaceMode(t.id) === MODE_RACE;
+  // Everything the choices on this screen add up to. Both ways of starting a
+  // track go through here -- pressing OK on the card and picking "Correr" out
+  // of its menu -- which they did not before, and the lap count chosen for a
+  // circuit was quietly lost by the first of them.
+  const runDef = t => ({
+    ...t,
+    ...(isCircuit(t) ? { laps: getLaps(t.id) } : {}),
+    race: isRace(t),
+  });
   // The trailing "Pistas partilhadas" card only exists on the first visit --
   // the shared screen has nothing further to lead to.
   const slots = () => list.length + (shared ? 0 : 1);
@@ -402,6 +413,8 @@ export function trackScreen(app, { shared = false } = {}) {
         <span>Recorde <b>${formatTime(best && best.ms)}</b>${who}</span></div>
       <div class="meta"><span>Contigo (${esc(app.car.name)}) <b>${formatTime(mine)}</b></span>
         ${isCircuit(t) ? `<span>Circuito <b>${getLaps(t.id)} voltas</b></span>` : ''}</div>
+      <div class="meta"><span>${isRace(t) ? 'Corrida <b>contra um adversário</b>'
+        : 'Contra o <b>relógio</b>'}</span></div>
     </div>`;
   };
 
@@ -508,14 +521,22 @@ export function trackScreen(app, { shared = false } = {}) {
     // A label may be a function, so "Partilhar" can show the choice it is
     // about to flip without the menu having to be closed and reopened.
     const items = [
-      { label: `Correr em ${t.name}`,
-        run: () => { app.pop(); app.startRace(isCircuit(t) ? { ...t, laps: getLaps(t.id) } : t); } },
+      { label: () => `${isRace(t) ? 'Corrida' : 'Contra o relógio'} em ${t.name}`,
+        run: () => { app.pop(); app.startRace(runDef(t)); } },
+      // Racing a car or racing the clock. The same track either way -- the
+      // record it keeps is the same record, set on the same line -- so this is
+      // a choice about company, not about which game is being played.
+      { label: () => `Modo: ${isRace(t) ? 'corrida' : 'contra o relógio'}`,
+        run: () => {
+          setRaceMode(t.id, isRace(t) ? MODE_TIME : MODE_RACE);
+          paintM(); refresh();
+        } },
       { label: 'Ver recordes', run: () => { app.pop(); app.push(recordsScreen(t)); } },
     ];
     // Only a circuit has laps to choose. The record is the best single lap, so
     // changing this never puts times out of reach of each other.
     if (isCircuit(t)) {
-      items.splice(1, 0, { label: () => `Voltas: ${getLaps(t.id)}`, run: () => {
+      items.splice(2, 0, { label: () => `Voltas: ${getLaps(t.id)}`, run: () => {
         const k = LAP_CHOICES.indexOf(getLaps(t.id));
         setLaps(t.id, LAP_CHOICES[(k + 1) % LAP_CHOICES.length]);
         paintM(); refresh();
@@ -571,7 +592,7 @@ export function trackScreen(app, { shared = false } = {}) {
       else if (a === 'right') { i = (i + 1) % slots(); paint(); }
       else if (a === 'ok' || a === 'down') {
         if (i === list.length) { app.push(trackScreen(app, { shared: true })); return; }
-        if (a === 'ok') app.startRace(list[i]);
+        if (a === 'ok') app.startRace(runDef(list[i]));
         else app.push(trackMenu());
       }
       else if (a === 'back') app.pop();

@@ -9,6 +9,8 @@ import { clamp, quat, v3 } from '../core/math.js';
 import { GhostRecorder, GhostPlayer, buildGhostMesh, ghostModelMatrix,
          loadGhost, saveGhost, clearGhost, lapSlice,
          GHOST_ALPHA, GHOST_AMBIENT } from './ghost.js';
+import { Rival, buildRivalMesh, rivalTarget } from './rival.js';
+import { paceFor } from './driver.js';
 import { profileKey } from '../ui/profiles.js';
 
 const bestKey = id => profileKey(`best.${id}`);
@@ -92,6 +94,22 @@ export function setLaps(id, n) {
   try { localStorage.setItem(lapsKey(id), String(n)); } catch { /* private mode */ }
 }
 
+// Racing a car, or racing the clock. Kept per track and per profile, exactly
+// the way the lap count is: it is a property of how you want to run this
+// particular track, not of the track itself, and not a global setting either.
+export const MODE_TIME = 'time';
+export const MODE_RACE = 'race';
+const modeKey = id => profileKey(`mode.${id}`);
+
+export function getRaceMode(id) {
+  try { return localStorage.getItem(modeKey(id)) === MODE_RACE ? MODE_RACE : MODE_TIME; }
+  catch { return MODE_TIME; }
+}
+
+export function setRaceMode(id, mode) {
+  try { localStorage.setItem(modeKey(id), mode); } catch { /* private mode */ }
+}
+
 // How the replay camera sits behind the car: back and up in the car's own
 // frame (so it banks and dips with the road exactly as the car does), tilted
 // down a little so the car sits in frame rather than at the bottom edge.
@@ -160,7 +178,32 @@ export class Game {
     this.laps = track.closed ? Math.max(1, def.laps || DEFAULT_LAPS) : 1;
     this.best = getBest(def.id);
     this.loadGhostFor(def.id);
+    this.loadRivalFor(def);
     this.restart();
+  }
+
+  // The car you race against, when the track was started as a race rather than
+  // a time trial.
+  //
+  // Working out how hard it should try means driving the whole track a handful
+  // of times, here, before the lights go out (see paceFor in game/driver.js) --
+  // about a quarter of a second, under the loading screen that is already on
+  // the way in. It is done per track *and* per car, because the same pace is a
+  // different lap time in each of the three.
+  loadRivalFor(def) {
+    const r = this.renderer;
+    if (this.rivalChunk) { r.dispose([this.rivalChunk]); this.rivalChunk = null; }
+    this.rival = null;
+    if (!def.race) return;
+    // Measured against your own best with this car, not the outright record:
+    // being chased by a car set to a time you have never got near with the
+    // machinery you are driving is not a race.
+    const mine = getCarBest(def.id, this.car0.id);
+    const seconds = rivalTarget(def, mine && mine.ms);
+    const solved = paceFor(this.track, this.car0.phys, seconds);
+    this.rival = new Rival(this.track, this.car0.phys, solved.pace);
+    this.rivalPredicted = solved.seconds;
+    this.rivalChunk = r.upload(buildRivalMesh());
   }
 
   loadGhostFor(id) {
@@ -195,6 +238,14 @@ export class Game {
     this.ghostRec = new GhostRecorder(this.track);
     this.ghostDelta = null;
     if (this.ghost) this.ghost.reset();
+    if (this.rival) this.rival.reset();
+    this.position = 1;
+  }
+
+  // Where the race ends, in the distance the cars count up: the same line, the
+  // same number of laps, for both of them.
+  get finishS() {
+    return this.laps * this.track.length - 12;
   }
 
   setMessage(text, sub = '', color = '#ffb43a', time = 1.4) {
@@ -235,6 +286,7 @@ export class Game {
     } else if (this.state === STATE.RACING) {
       this.timeMs += dt * 1000;
       this.car.update(dt, input);
+      this.updateRival(dt);
       this.ghostRec.sample(this.car, this.timeMs);
       this.updateGhostDelta();
       this.checkProgress();
@@ -306,8 +358,35 @@ export class Game {
     return this.track.closed ? this.timeMs - this.lapStart : this.timeMs;
   }
 
+  // The rival's own race, one step of it, plus whatever happens when the two
+  // cars occupy the same piece of road.
+  updateRival(dt) {
+    if (!this.rival) return;
+    this.rival.update(dt, this.timeMs, this.car, this.finishS);
+    // Touching another car is a knock, not a crash: the same sound a barrier
+    // makes, scaled the same way, because it is the same kind of event.
+    const hit = this.rival.contact(this.car);
+    if (hit > 0.4 && this.sound) this.sound.wallHit(hit * 2.4);
+    this.updatePosition();
+  }
+
+  // 1 while you are in front of the rival, 2 while you are not. Read off the
+  // distance each car has run, which is the same number for both of them and
+  // already counts laps.
+  updatePosition() {
+    if (!this.rival) return;
+    // Once it has crossed the line the gap stops meaning anything -- it is
+    // parked, and you are either already past it or you are not going to be.
+    if (this.rival.finishMs != null) this.position = 2;
+    else this.position = this.car.s >= this.rival.car.s ? 1 : 2;
+  }
+
   updateGhostDelta() {
-    if (!this.showGhost || !this.ghost) { this.ghostDelta = null; return; }
+    // Not while racing a car. The ghost is not drawn then (see render), and a
+    // gap to something that is not on the road is a second number to read in
+    // the corner of your eye that answers a question nobody is asking during a
+    // race -- the one that matters is how far away the car in front is.
+    if (!this.showGhost || !this.ghost || this.rival) { this.ghostDelta = null; return; }
     const tg = this.ghost.timeAt(this.lapDistance());
     this.ghostDelta = tg == null ? null : this.lapTime() - tg;
   }
@@ -408,9 +487,17 @@ export class Game {
         this.loadGhostFor(this.def.id);
       }
     }
-    if (this.sound) this.sound.finish(this.newRecord);
+    // A race is won or lost on who got here first, and that is decided the
+    // moment you cross: the rival either already has a finish time or it does
+    // not, and its own race stops mattering either way.
+    const won = this.rival ? this.rival.finishMs == null : null;
+    if (this.rival) this.position = won ? 1 : 2;
+    if (this.sound) this.sound.finish(this.newRecord || won === true);
     this.onFinish({
       time: this.finalTime, best: this.best, record: this.newRecord,
+      // null in a time trial, true or false in a race.
+      won,
+      rivalTime: this.rival && this.rival.finishMs,
       // Worth telling apart from the overall record only when it is not also
       // one: "new record" already implies a new personal best with this car.
       carRecord: newCarRecord && !this.newRecord,
@@ -468,13 +555,24 @@ export class Game {
       // race in progress below.
       dynamic.push({ chunk: this.replayChunk, model: ghostModelMatrix(this.replayPose),
                      material: surface(1), alpha: 1 });
-    } else if (this.showGhost && this.ghost && this.ghostChunk
+    } else if (this.showGhost && this.ghost && this.ghostChunk && !this.rival
         && this.state !== STATE.COUNTDOWN) {
+      // Never alongside the rival: two translucent hints of a car and one
+      // solid one, all on the same piece of road, is three things to read and
+      // one race to drive. In a race the car in front of you is the thing to
+      // beat, and the record holder can wait for a time trial.
       const pose = this.ghost.at(this.lapTime());
       if (pose) {
         dynamic.push({ chunk: this.ghostChunk, model: ghostModelMatrix(pose),
                        material: surface(GHOST_AMBIENT), alpha: GHOST_ALPHA });
       }
+    }
+
+    // Opaque, fully lit and casting a shadow like anything else in the world:
+    // it is a car on the track, not a replay of one.
+    if (this.rival && this.rivalChunk) {
+      dynamic.push({ chunk: this.rivalChunk, model: ghostModelMatrix(this.rival.pose()),
+                     material: surface(0.55, 0.3, 40), alpha: 1 });
     }
 
     // The frame is described rather than drawn: what there is and what it is
@@ -571,6 +669,13 @@ export class Game {
         lapMs: this.track.closed ? this.lapTime() : null,
         bestIsLap: this.track.closed,
         ghostDelta: this.ghostDelta,
+        // The race, if there is one: which of the two cars is in front, and by
+        // how far. In metres rather than seconds -- in a time trial the thing
+        // you are chasing is a clock, and in a race it is a car you can see.
+        position: this.rival ? this.position : null,
+        rivalGap: this.rival && this.state === STATE.RACING
+          ? this.rival.gapTo(this.car) : null,
+        rivalDone: !!(this.rival && this.rival.finishMs != null),
         message, submessage: sub, messageColor: color,
       });
     }

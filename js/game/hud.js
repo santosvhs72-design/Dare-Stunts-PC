@@ -529,6 +529,33 @@ export class Hud {
       ctx.textAlign = 'center';
     }
 
+    // The race: which of the two cars is in front, and by how far.
+    //
+    // In metres rather than seconds, unlike the ghost gap below it. A ghost is
+    // a clock you are chasing and seconds are the only thing it can be said
+    // in; a rival is a car, and how far away it is is the question you are
+    // actually asking -- especially in the half of a lap where it is out of
+    // sight behind you.
+    if (st.position != null) {
+      const first = st.position === 1;
+      const gap = st.rivalGap == null ? null : Math.abs(Math.round(st.rivalGap));
+      const label = st.rivalDone && !first ? 'TERMINOU'
+        : gap == null ? '' : `${first ? '+' : '−'}${gap} m`;
+      ctx.font = `700 20px ${MONO}`;
+      const bw = Math.max(120, ctx.measureText(label).width + 74);
+      panel(w / 2 - bw / 2, below + 6, bw, 32);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = first ? GREEN : RED;
+      ctx.font = `700 19px ${FONT}`;
+      ctx.fillText(first ? '1.º' : '2.º', w / 2 - bw / 2 + 14, below + 28);
+      ctx.textAlign = 'right';
+      ctx.font = `700 20px ${MONO}`;
+      ctx.fillStyle = tone(PRINT, 0.85);
+      ctx.fillText(label, w / 2 + bw / 2 - 14, below + 28);
+      ctx.textAlign = 'center';
+      below += 38;
+    }
+
     // Gap to the record holder's ghost. Only drawn when there is a ghost, so
     // the cockpit is untouched in a plain time trial -- and it earns its space,
     // because for most of a lap the ghost is out of sight behind or ahead.

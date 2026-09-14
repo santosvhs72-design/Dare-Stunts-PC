@@ -14,7 +14,7 @@
 // take over the buttons completely, so a button never means two things at once.
 import { PIECE_TYPES, defaults, describe } from '../world/pieces.js';
 import { walkTrack, buildTrack } from '../world/track.js';
-import { testDrive } from '../editor/autopilot.js';
+import { testDrive } from '../game/driver.js';
 import { closeCircuit } from '../editor/close.js';
 import { trackDefFrom, saveCustom, loadCustom, setTrackShared } from '../world/customtracks.js';
 import { node, esc, confirmModal } from './screens.js';

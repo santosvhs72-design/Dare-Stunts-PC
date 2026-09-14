@@ -8,9 +8,9 @@ mundo 3D, Canvas 2D para o cockpit e Web Audio sintetizado para o som.
 
 Derivado de [Dare Stunts TV](https://github.com/santosvhs72-design/Dare-Stunts-TV),
 que por sua vez vem de [Dare Stunts](https://github.com/santosvhs72-design/Dare-Stunts).
-O jogo é o mesmo: a física, as pistas, o construtor, os fantasmas e os recordes
-vieram de lá inteiros e não é intenção deste repositório mexer-lhes. O que muda
-é a imagem.
+A física, as pistas, o construtor, os fantasmas e os recordes vieram de lá
+inteiros. O que muda é a imagem — e, desde a versão 0.2, uma coisa que não é
+imagem: pode-se correr contra um adversário em vez de contra o relógio.
 
 ## Porquê um repositório à parte
 
@@ -37,6 +37,11 @@ Por ordem do que mais se nota:
    em que se olha, em vez de ser mantida igual ao horizonte à mão.
 5. **Efeitos** — reflexo de estrada molhada, pó nas bermas, marcas de travagem.
 
+Uma coisa que o adversário ainda não tem: linha de corrida. Conduz o meio da
+estrada e trava para o que vem a seguir, e é só isso — não corta as curvas por
+dentro. É rápido o suficiente para ganhar à maioria das voltas e lento o
+suficiente para ser batido por uma boa.
+
 Duas coisas a fazer que não estão nesta lista: as luzes do tecto de um túnel
 deviam ser emissivas e brilhar, e para isso precisam de ser uma malha à parte
 da abóbada onde estão hoje embutidas; e a interface tem de deixar de ser a da
@@ -50,6 +55,25 @@ módulos ES exigem um contexto seguro, e `file://` não é um:
 ```sh
 python3 -m http.server 8765
 ```
+
+## Corrida ou contra o relógio
+
+Cada pista pode ser corrida das duas maneiras, e a escolha fica guardada por
+pista e por perfil, como o número de voltas: no ecrã das pistas, **↓** abre o
+menu e **Modo** alterna entre as duas.
+
+Contra o relógio é o jogo como sempre foi, com o fantasma do recordista se
+houver um. Numa corrida há um carro na pista contigo, conduzido pelo mesmo
+condutor de referência que o construtor usa para decidir se uma pista que
+construíste é possível de todo (`js/game/driver.js`). É um carro a sério, com
+a mesma física que o teu: pode ser travado, encosta-se para o lado quando
+chegas ao lado dele, e se lhe tocares sentem-no os dois.
+
+O ritmo dele não é uma dificuldade escolhida à mão — é **resolvido** antes da
+partida, procurando por bissecção o esforço que o leva a fazer o tempo-alvo da
+pista. Quando já és mais rápido do que esse tempo com esse carro, passa a ser
+o teu melhor com uma folga de 3%. Custa cerca de 350 ms, debaixo do ecrã de
+carregamento que já lá estava.
 
 ## Comandos
 

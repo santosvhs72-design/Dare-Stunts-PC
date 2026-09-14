@@ -242,7 +242,7 @@ function listModal(title, items, onBack) {
   };
 }
 
-game.onFinish = ({ time, best, record, carRecord, lapTimes, circuit, scored }) => {
+game.onFinish = ({ time, best, record, carRecord, lapTimes, circuit, scored, won, rivalTime }) => {
   const who = best && best.car ? ` · ${carById(best.car).name}` : '';
   // On a circuit the board is about the best single lap, so say so rather than
   // letting a lap time sit next to a three-lap total as if they compared.
@@ -253,12 +253,25 @@ game.onFinish = ({ time, best, record, carRecord, lapTimes, circuit, scored }) =
   // company), a personal best with this particular car even though someone
   // else's car still holds the track outright (worth naming, or trying a car
   // you are not fastest with would only ever feel like losing), or neither.
-  const title = record ? 'Novo recorde!'
+  // In a race, who won comes first and the record is a footnote; the clock
+  // still ran and still counts, but it is not what the last two minutes were
+  // about. In a time trial nothing here changes.
+  const title = won === true ? 'Ganhaste!'
+    : won === false ? 'Segundo lugar'
+    : record ? 'Novo recorde!'
     : carRecord ? `Melhor com o ${esc(game.car0.name)}!` : 'Terminado';
-  const sub = record
+  const recordLine = record
     ? `${circuit ? 'Melhor volta' : 'Melhor tempo'} em ${esc(game.def.name)}`
       + ` com o ${esc(game.car0.name)}${circuit ? `: ${formatTime(scored)}` : ''}`
     : bestLine;
+  // The margin, when there is one to name: the rival only has a finish time if
+  // it got there first, so a win is measured against nothing and just says so.
+  const raceLine = won === true
+    ? `Passaste a meta à frente do adversário${record ? ' &mdash; e com recorde' : ''}`
+    : won === false && rivalTime != null
+      ? `O adversário chegou ${formatTime(time - rivalTime)} antes de ti`
+      : 'O adversário chegou primeiro';
+  const sub = won == null ? recordLine : raceLine;
   // On a circuit the total is only half the story: which lap was the good one
   // is the part worth looking at, so every one of them is listed with the best
   // picked out.
